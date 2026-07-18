@@ -1,12 +1,13 @@
-import { Plus, X } from 'lucide-react'
+import { FolderOpen, Plus, X } from 'lucide-react'
 import type { Session } from '@shared/index'
 import { useAppStore } from '@renderer/stores/app-store'
 
 interface TerminalSubTabBarProps {
   link: Session
+  onOpenSftp?: () => void
 }
 
-export function TerminalSubTabBar({ link }: TerminalSubTabBarProps): React.JSX.Element {
+export function TerminalSubTabBar({ link, onOpenSftp }: TerminalSubTabBarProps): React.JSX.Element {
   const setActiveTerminal = useAppStore((s) => s.setActiveTerminal)
   const addTerminal = useAppStore((s) => s.addTerminal)
   const removeTerminal = useAppStore((s) => s.removeTerminal)
@@ -50,6 +51,18 @@ export function TerminalSubTabBar({ link }: TerminalSubTabBarProps): React.JSX.E
       >
         <Plus size={16} />
       </button>
+
+      {onOpenSftp && (
+        <button
+          type="button"
+          className="ml-auto flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-[12px] text-accent-muted transition-colors hover:bg-surface-overlay/60 hover:text-terminal-fg"
+          title="SFTP 文件传输"
+          onClick={onOpenSftp}
+        >
+          <FolderOpen size={15} />
+          <span>SFTP</span>
+        </button>
+      )}
     </div>
   )
 }

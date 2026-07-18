@@ -31,6 +31,8 @@ export function RecordingButton({
   const canRecord = Boolean(
     activeSession &&
       activeSession.type !== 'vnc' &&
+      activeSession.type !== 'sftp' &&
+      activeSession.type !== 'ftp' &&
       activeTerminal?.status === 'connected'
   )
 
@@ -40,7 +42,14 @@ export function RecordingButton({
   }
 
   const toggleRecording = async (): Promise<void> => {
-    if (!activeSession || !activeTerminal || activeSession.type === 'vnc') return
+    if (!activeSession || !activeTerminal) return
+    if (
+      activeSession.type === 'vnc' ||
+      activeSession.type === 'sftp' ||
+      activeSession.type === 'ftp'
+    ) {
+      return
+    }
 
     if (recording) {
       await window.api.recording.stop(activeTerminal.id)

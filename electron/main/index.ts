@@ -6,6 +6,7 @@ import { registerIpcHandlers } from './ipc/register-handlers'
 import { LocalFs } from './fs/local-fs'
 import { PtyManager } from './pty/pty-manager'
 import { SftpManager } from './sftp/sftp-manager'
+import { FtpManager } from './ftp/ftp-manager'
 import { ConnectionStore } from './store/connection-store'
 import { SettingsStore } from './store/settings-store'
 import { SshManager } from './ssh/ssh-manager'
@@ -33,6 +34,7 @@ let vncManager: VncManager | null = null
 let vncProxyService: VncProxyService | null = null
 let sshAuthBridge: SshAuthBridge | null = null
 let sftpManager: SftpManager | null = null
+let ftpManager: FtpManager | null = null
 let tunnelManager: TunnelManager | null = null
 let ptyManager: PtyManager | null = null
 let recordingManager: RecordingManager | null = null
@@ -117,6 +119,7 @@ app.whenReady().then(() => {
   vncManager = new VncManager(connectionStore, vncProxyService, () => mainWindow)
   ptyManager = new PtyManager(() => mainWindow, recordingManager)
   sftpManager = new SftpManager(connectionStore, () => mainWindow)
+  ftpManager = new FtpManager(connectionStore, () => mainWindow)
   const quickCommandStore = new QuickCommandStore(app.getPath('userData'))
   const noteStore = new NoteStore(app.getPath('userData'))
   const monitorService = new MonitorService(sshManager)
@@ -133,6 +136,7 @@ app.whenReady().then(() => {
     ptyManager,
     settingsStore,
     sftpManager,
+    ftpManager,
     localFs,
     tunnelStore,
     tunnelManager,
@@ -179,6 +183,7 @@ app.on('window-all-closed', () => {
   void vncManager?.disconnectAll()
   void vncProxyService?.stopAll()
   sftpManager?.disconnectAll()
+  ftpManager?.disconnectAll()
   tunnelManager?.stopAll()
   ptyManager?.destroyAll()
   recordingManager?.stopAll()

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { GripVertical, Laptop, Monitor, Network, Plus, Scan, Server, X } from 'lucide-react'
+import { FolderOpen, GripVertical, Laptop, Monitor, Network, Plus, Scan, Server, X } from 'lucide-react'
 import { useAppStore } from '@renderer/stores/app-store'
 import type { Session } from '@shared/index'
 
@@ -7,6 +7,9 @@ function SessionIcon({ session }: { session: Session }): React.JSX.Element {
   const connections = useAppStore((s) => s.connections)
 
   if (session.type === 'local') return <Laptop size={14} className="shrink-0 opacity-85" />
+  if (session.type === 'sftp' || session.type === 'ftp') {
+    return <FolderOpen size={14} className="shrink-0 opacity-85" />
+  }
 
   const connection = connections.find((c) => c.id === session.connectionId)
 

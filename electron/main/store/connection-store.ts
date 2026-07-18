@@ -157,6 +157,9 @@ export class ConnectionStore {
       note: input.note,
       ssh: input.ssh,
       rdp: input.rdp,
+      telnet: input.telnet,
+      vnc: input.vnc,
+      ftp: input.ftp,
       favorite: input.favorite ?? false,
       sortOrder: this.nextConnectionSortOrder(groupId),
       createdAt: now,
@@ -193,6 +196,9 @@ export class ConnectionStore {
       note: input.note,
       ssh: input.ssh,
       rdp: input.rdp,
+      telnet: input.telnet,
+      vnc: input.vnc,
+      ftp: input.ftp,
       favorite: input.favorite ?? existing.favorite ?? false,
       updatedAt: new Date().toISOString()
     }

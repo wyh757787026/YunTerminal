@@ -47,7 +47,7 @@ export function useConnectionLatency(
 
     setLatencyMap((prev) => ({ ...prev, [id]: { status: 'pending' } }))
     try {
-      const result = await window.api.connection.test(id)
+      const result = await window.api.connection.probeLatency(id)
       if (result.success && result.latencyMs != null) {
         setLatencyMap((prev) => ({
           ...prev,

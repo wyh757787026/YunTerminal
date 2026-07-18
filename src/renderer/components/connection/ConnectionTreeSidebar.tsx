@@ -18,7 +18,8 @@ function matchesProtocolTab(protocol: ConnectionProtocol | undefined, tab: strin
   if (tab === 'rdp') return value === 'rdp'
   if (tab === 'telnet') return value === 'telnet'
   if (tab === 'vnc') return value === 'vnc'
-  if (tab === 'ssh') return value === 'ssh'
+  if (tab === 'ssh' || tab === 'tunnel') return value === 'ssh'
+  if (tab === 'ftp') return value === 'ftp'
   return true
 }
 

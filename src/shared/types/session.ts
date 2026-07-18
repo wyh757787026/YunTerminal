@@ -1,4 +1,4 @@
-export type SessionType = 'ssh' | 'local' | 'telnet' | 'vnc'
+export type SessionType = 'ssh' | 'local' | 'telnet' | 'vnc' | 'sftp' | 'ftp'
 export type SessionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 export interface TerminalWindow {

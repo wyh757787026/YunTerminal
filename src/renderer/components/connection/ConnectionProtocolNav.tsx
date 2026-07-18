@@ -5,8 +5,7 @@ const PROTOCOL_TABS: { id: ProtocolTab; label: string; enabled: boolean }[] = [
   { id: 'ssh', label: 'SSH', enabled: true },
   { id: 'rdp', label: 'RDP', enabled: true },
   { id: 'telnet', label: 'Telnet', enabled: true },
-  { id: 'tunnel', label: '隧道', enabled: true },
-  { id: 'vnc', label: 'VNC', enabled: true }
+  { id: 'ftp', label: 'FTP', enabled: true }
 ]
 
 export function ConnectionProtocolNav(): React.JSX.Element {

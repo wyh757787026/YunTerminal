@@ -4,6 +4,8 @@ import type {
   AuthType,
   ConnectionInput,
   ConnectionProtocol,
+  FtpSecureMode,
+  FtpSettings,
   RdpDisplayMode,
   RdpRenderQuality,
   StoredConnection
@@ -61,6 +63,8 @@ interface FormState {
   vncShared: boolean
   vncQualityLevel: string
   vncCompressionLevel: string
+  ftpSecureMode: FtpSecureMode
+  ftpPassive: boolean
 }
 
 const SSH_TABS: Array<{ id: DialogTab; label: string }> = [
@@ -83,6 +87,8 @@ const VNC_TABS: Array<{ id: DialogTab; label: string }> = [
   { id: 'advanced', label: '高级' }
 ]
 
+const FTP_TABS: Array<{ id: DialogTab; label: string }> = [{ id: 'basic', label: '基本' }]
+
 function resolveDefaultProtocol(
   connection: StoredConnection | null | undefined,
   protocolTab: string
@@ -91,6 +97,7 @@ function resolveDefaultProtocol(
   if (protocolTab === 'rdp') return 'rdp'
   if (protocolTab === 'telnet') return 'telnet'
   if (protocolTab === 'vnc') return 'vnc'
+  if (protocolTab === 'ftp') return 'ftp'
   return 'ssh'
 }
 
@@ -98,8 +105,21 @@ function defaultPortForProtocol(protocol: ConnectionProtocol): number {
   if (protocol === 'rdp') return 3389
   if (protocol === 'telnet') return 23
   if (protocol === 'vnc') return 5900
+  if (protocol === 'ftp') return 21
   return 22
 }
+
+function resolveFtpSecureMode(ftp?: FtpSettings): FtpSecureMode {
+  if (ftp?.secureMode) return ftp.secureMode
+  if (ftp?.secure) return 'explicit'
+  return 'plain'
+}
+
+function defaultPortForFtpSecureMode(mode: FtpSecureMode): number {
+  return mode === 'implicit' ? 990 : 21
+}
+
+const FTP_DEFAULT_PORTS = new Set(['21', '990'])
 
 function toFormState(
   connection?: StoredConnection | null,
@@ -147,7 +167,9 @@ function toFormState(
     vncClipViewport: connection?.vnc?.clipViewport ?? false,
     vncShared: connection?.vnc?.shared ?? true,
     vncQualityLevel: String(connection?.vnc?.qualityLevel ?? 6),
-    vncCompressionLevel: String(connection?.vnc?.compressionLevel ?? 2)
+    vncCompressionLevel: String(connection?.vnc?.compressionLevel ?? 2),
+    ftpSecureMode: resolveFtpSecureMode(connection?.ftp),
+    ftpPassive: connection?.ftp?.passive !== false
   }
 }
 
@@ -172,14 +194,16 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
   const [credentialManageOpen, setCredentialManageOpen] = useState(false)
   const [showTelnetPassword, setShowTelnetPassword] = useState(false)
   const [showVncPassword, setShowVncPassword] = useState(false)
+  const [showFtpPassword, setShowFtpPassword] = useState(false)
 
   const isEditing = Boolean(connection)
   const isRdp = form.protocol === 'rdp'
   const isTelnet = form.protocol === 'telnet'
   const isVnc = form.protocol === 'vnc'
+  const isFtp = form.protocol === 'ftp'
   const isSsh = form.protocol === 'ssh'
   const protocolLocked = !isEditing
-  const tabs = isRdp ? RDP_TABS : isVnc ? VNC_TABS : SSH_TABS
+  const tabs = isRdp ? RDP_TABS : isVnc ? VNC_TABS : isFtp ? FTP_TABS : SSH_TABS
 
   const proxyOptions = useMemo(
     () => connections.filter((c) => c.id !== connection?.id && c.protocol === 'ssh'),
@@ -192,9 +216,9 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
   }, [connection, groups, defaultProtocol])
 
   useEffect(() => {
-    if (isRdp || isTelnet || isVnc) return
+    if (isRdp || isTelnet || isVnc || isFtp) return
     void window.api.credential.list().then(setCredentials)
-  }, [isRdp, isTelnet, isVnc, credentialManageOpen])
+  }, [isRdp, isTelnet, isVnc, isFtp, credentialManageOpen])
 
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]): void => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -230,18 +254,18 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
       host: form.host.trim(),
       port,
       username: form.username.trim(),
-      authType: isRdp || isTelnet || isVnc ? 'password' : form.authType,
+      authType: isRdp || isTelnet || isVnc || isFtp ? 'password' : form.authType,
       credentialId:
         isSsh && form.authType === 'credential' ? form.credentialId || undefined : undefined,
       groupId: form.groupId,
-      tags: isTelnet || isVnc
+      tags: isTelnet || isVnc || isFtp
         ? undefined
         : form.tags
             .split(',')
             .map((t) => t.trim())
             .filter(Boolean),
       note: form.note.trim() || undefined,
-      favorite: isTelnet || isVnc ? false : form.favorite,
+      favorite: isTelnet || isVnc || isFtp ? false : form.favorite,
       proxyChain: isSsh && form.proxyChain.length > 0 ? form.proxyChain : undefined
     }
 
@@ -285,6 +309,12 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
         qualityLevel,
         compressionLevel
       }
+    } else if (isFtp) {
+      input.ftp = {
+        secureMode: form.ftpSecureMode,
+        secure: form.ftpSecureMode === 'explicit',
+        passive: form.ftpPassive
+      }
     } else if (!isTelnet) {
       const keepaliveInterval = Number(form.sshKeepaliveInterval)
       const readyTimeout = Number(form.sshReadyTimeout)
@@ -319,7 +349,7 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
       }
     }
 
-    if (isTelnet || isVnc) {
+    if (isTelnet || isVnc || isFtp) {
       if (form.password) {
         input.secrets = { password: form.password }
       }
@@ -358,7 +388,7 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
       if (isEditing && connection) {
         await updateConnection(connection.id, input)
       } else {
-        if (!isRdp && !isTelnet && !isVnc) {
+        if (!isRdp && !isTelnet && !isVnc && !isFtp) {
           if (form.authType === 'password' && !form.password) {
             throw new Error('请填写密码')
           }
@@ -368,8 +398,10 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
           if (form.authType === 'credential' && !form.credentialId) {
             throw new Error('请选择登录凭证')
           }
+        } else if (isFtp && !form.password && !(isEditing && connection?.hasPassword)) {
+          throw new Error('请填写 FTP 密码')
         } else if (!form.password) {
-          // RDP password optional
+          // RDP / Telnet password optional
         }
         await createConnection(input)
       }
@@ -428,7 +460,7 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
               {isEditing ? '编辑连接' : '新建连接'}
             </h2>
             <span className="rounded bg-surface-overlay px-1.5 py-0.5 text-[10px] text-accent-muted">
-              {isRdp ? 'RDP' : isTelnet ? 'Telnet' : isVnc ? 'VNC' : 'SSH'}
+              {isRdp ? 'RDP' : isTelnet ? 'Telnet' : isVnc ? 'VNC' : isFtp ? 'FTP' : 'SSH'}
             </span>
           </div>
           <button className="btn-icon" onClick={onClose}>
@@ -436,7 +468,7 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
           </button>
         </div>
 
-        {!isTelnet && (
+        {!isTelnet && !isFtp && (
           <div className="flex shrink-0 overflow-x-auto border-b border-surface-border px-4">
             {tabs.map((tab) => (
               <button
@@ -535,6 +567,126 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
                     </button>
                   </div>
                 </div>
+              </Field>
+
+              <Field label="备注">
+                <textarea
+                  className="input min-h-[72px] resize-y"
+                  value={form.note}
+                  onChange={(e) => updateField('note', e.target.value)}
+                  placeholder=""
+                />
+              </Field>
+            </>
+          )}
+
+          {showBasic && isFtp && (
+            <>
+              <Field label="名称">
+                <input
+                  className="input"
+                  value={form.name}
+                  onChange={(e) => updateField('name', e.target.value)}
+                  placeholder="FTP 站点"
+                />
+              </Field>
+
+              <Field label="分组">
+                <select
+                  className="input"
+                  value={form.groupId}
+                  onChange={(e) => updateField('groupId', e.target.value)}
+                >
+                  <option value="" disabled>
+                    请选择分组
+                  </option>
+                  {groups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="地址" hint="明文/显式 FTPS 默认 21，隐式 FTPS 默认 990。">
+                <div className="grid grid-cols-[1fr_5.5rem] gap-2">
+                  <input
+                    className="input"
+                    value={form.host}
+                    onChange={(e) => updateField('host', e.target.value)}
+                    placeholder="ftp.example.com"
+                  />
+                  <input
+                    className="input"
+                    value={form.port}
+                    onChange={(e) => updateField('port', e.target.value)}
+                    placeholder="21"
+                  />
+                </div>
+              </Field>
+
+              <Field label="用户">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="input"
+                    value={form.username}
+                    onChange={(e) => updateField('username', e.target.value)}
+                    placeholder="用户名"
+                  />
+                  <div className="relative">
+                    <input
+                      className="input w-full pr-9"
+                      type={showFtpPassword ? 'text' : 'password'}
+                      value={form.password}
+                      onChange={(e) => updateField('password', e.target.value)}
+                      placeholder={
+                        isEditing && connection?.hasPassword ? '留空保持不变' : '密码'
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn-icon-sm absolute right-1 top-1/2 -translate-y-1/2"
+                      onClick={() => setShowFtpPassword((v) => !v)}
+                      tabIndex={-1}
+                    >
+                      {showFtpPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+              </Field>
+
+              <Field label="加密" hint="明文 / 显式 FTPS（21）/ 隐式 FTPS（990）">
+                <select
+                  className="input"
+                  value={form.ftpSecureMode}
+                  onChange={(e) => {
+                    const mode = e.target.value as FtpSecureMode
+                    setForm((prev) => {
+                      const nextPort = FTP_DEFAULT_PORTS.has(prev.port)
+                        ? String(defaultPortForFtpSecureMode(mode))
+                        : prev.port
+                      return { ...prev, ftpSecureMode: mode, port: nextPort }
+                    })
+                  }}
+                >
+                  <option value="plain">仅使用普通 FTP（不安全）</option>
+                  <option value="explicit">需要显式 FTP over TLS</option>
+                  <option value="implicit">需要隐式 FTP over TLS</option>
+                </select>
+              </Field>
+
+              <Field
+                label="传输模式"
+                hint="被动（推荐）：本机连服务器数据端口。主动：服务器回连本机，局域网或部分旧服务需要。"
+              >
+                <select
+                  className="input"
+                  value={form.ftpPassive ? 'passive' : 'active'}
+                  onChange={(e) => updateField('ftpPassive', e.target.value === 'passive')}
+                >
+                  <option value="passive">被动（PASV）</option>
+                  <option value="active">主动（PORT）</option>
+                </select>
               </Field>
 
               <Field label="备注">
@@ -677,7 +829,7 @@ export function ConnectionDialog({ connection, onClose }: ConnectionDialogProps)
             </>
           )}
 
-          {showBasic && !isTelnet && !isVnc && (
+          {showBasic && !isTelnet && !isVnc && !isFtp && (
             <>
               <Field label="名称">
                 <input

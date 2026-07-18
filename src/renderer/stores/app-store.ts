@@ -8,8 +8,9 @@ import {
 } from '@renderer/lib/session-utils'
 export type SplitDirection = 'horizontal' | 'vertical'
 export type FocusedPane = 'primary' | 'secondary'
-export type ProtocolTab = 'ssh' | 'rdp' | 'telnet' | 'tunnel' | 'vnc'
-export type BottomPanelTab = 'sftp' | 'tunnel' | 'notes' | 'monitor' | 'recordings'
+export type ProtocolTab = 'ssh' | 'rdp' | 'telnet' | 'tunnel' | 'vnc' | 'ftp'
+export type WorkspaceView = 'connections' | 'session'
+export type BottomPanelTab = 'tunnel' | 'notes' | 'monitor' | 'recordings'
 export type ConnectionSection = 'all' | 'favorites' | 'recent' | 'common' | `group:${string}`
 
 interface SplitState {
@@ -27,6 +28,8 @@ interface AppState {
   recent: StoredConnection[]
   sessions: Session[]
   activeSessionId: string | null
+  /** connections=协议连接列表；session=当前会话工作区 */
+  workspaceView: WorkspaceView
   split: SplitState
   sidebarCollapsed: boolean
   bottomPanelOpen: boolean
@@ -48,6 +51,7 @@ interface AppState {
 
   setSearchQuery: (query: string) => void
   setProtocolTab: (tab: ProtocolTab) => void
+  setWorkspaceView: (view: WorkspaceView) => void
   setConnectionSection: (section: ConnectionSection) => void
   toggleSidebar: () => void
   toggleBottomPanel: () => void
@@ -115,6 +119,19 @@ function createLinkSession(
   title: string,
   connectionId?: string
 ): Session {
+  if (type === 'sftp' || type === 'ftp') {
+    return {
+      id: crypto.randomUUID(),
+      type,
+      connectionId,
+      title,
+      status: 'connecting',
+      createdAt: new Date().toISOString(),
+      terminals: [],
+      activeTerminalId: null
+    }
+  }
+
   const terminal = createTerminalWindow('终端')
   return {
     id: crypto.randomUUID(),
@@ -129,6 +146,19 @@ function createLinkSession(
 }
 
 function disconnectLink(session: Session): void {
+  if (session.type === 'sftp') {
+    if (session.connectionId) {
+      void window.api.sftp.disconnect(session.connectionId)
+    }
+    return
+  }
+  if (session.type === 'ftp') {
+    if (session.connectionId) {
+      void window.api.ftp.disconnect(session.connectionId)
+    }
+    return
+  }
+
   for (const terminal of session.terminals) {
     void window.api.recording.stop(terminal.id)
     if (session.type === 'ssh') {
@@ -144,6 +174,11 @@ function disconnectLink(session: Session): void {
       void window.api.pty.destroy(terminal.id)
     }
   }
+
+  // SSH 会话关闭时一并释放同连接上的 SFTP 通道
+  if (session.type === 'ssh' && session.connectionId) {
+    void window.api.sftp.disconnect(session.connectionId)
+  }
 }
 export const useAppStore = create<AppState>((set, get) => ({
   connections: [],
@@ -152,10 +187,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   recent: [],
   sessions: [],
   activeSessionId: null,
+  workspaceView: 'connections',
   split: initialSplit,
   sidebarCollapsed: false,
   bottomPanelOpen: false,
-  bottomPanelTab: 'sftp',
+  bottomPanelTab: 'tunnel',
   aiPanelOpen: false,
   quickCommandsBarOpen: false,
   searchQuery: '',
@@ -172,7 +208,47 @@ export const useAppStore = create<AppState>((set, get) => ({
   pendingQuickCommand: null,
 
   setSearchQuery: (query) => set({ searchQuery: query }),
-  setProtocolTab: (tab) => set({ protocolTab: tab, searchQuery: '' }),
+  setProtocolTab: (tab) => {
+    set({ protocolTab: tab, searchQuery: '' })
+
+    // 已有对应协议会话时，切回协议 Tab 直接回到终端/会话页，而不是连接列表
+    const sessionType =
+      tab === 'ssh'
+        ? 'ssh'
+        : tab === 'telnet'
+          ? 'telnet'
+          : tab === 'vnc'
+            ? 'vnc'
+            : tab === 'ftp'
+              ? 'ftp'
+              : null
+
+    if (!sessionType) {
+      set({ workspaceView: 'connections' })
+      return
+    }
+
+    const { sessions, activeSessionId } = get()
+    const active = sessions.find((s) => s.id === activeSessionId)
+    const preferred =
+      active?.type === sessionType && active.status !== 'disconnected'
+        ? active
+        : (sessions.find(
+            (s) => s.type === sessionType && s.status === 'connected'
+          ) ??
+          sessions.find(
+            (s) => s.type === sessionType && s.status !== 'disconnected'
+          ) ??
+          sessions.find((s) => s.type === sessionType))
+
+    if (preferred) {
+      get().setActiveSession(preferred.id)
+      return
+    }
+
+    set({ workspaceView: 'connections' })
+  },
+  setWorkspaceView: (view) => set({ workspaceView: view }),
   setConnectionSection: (section) => set({ connectionSection: section }),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
@@ -330,7 +406,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         ? 'telnet'
         : connection.protocol === 'vnc'
           ? 'vnc'
-          : 'ssh'
+          : connection.protocol === 'ftp'
+            ? 'ftp'
+            : 'ssh'
 
     if (!options?.newTab) {
       const existing = get().sessions.find(
@@ -340,7 +418,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           s.status !== 'disconnected'
       )
       if (existing) {
-        get().assignSessionToFocusedPane(existing.id)
+        get().setActiveSession(existing.id)
         return
       }
     }
@@ -349,9 +427,40 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set((s) => ({
       sessions: [...s.sessions, session],
-      activeSessionId: session.id
+      activeSessionId: session.id,
+      workspaceView: 'session'
     }))
     get().assignSessionToFocusedPane(session.id)
+
+    // SSH 建连由会话生命周期发起；SFTP 在 SSH 就绪后复用同一连接
+    if (sessionType === 'ssh' && session.activeTerminalId) {
+      void window.api.ssh.connect({
+        sessionId: session.activeTerminalId,
+        connectionId: connection.id,
+        cols: 80,
+        rows: 24
+      })
+    }
+
+    if (sessionType === 'ftp') {
+      void window.api.ftp
+        .connect(connection.id)
+        .then(() => {
+          const current = get().sessions.find((s) => s.id === session.id)
+          if (!current) return
+          get().updateSessionStatus(session.id, 'connected')
+        })
+        .catch((err: unknown) => {
+          const current = get().sessions.find((s) => s.id === session.id)
+          if (!current) return
+          const raw = err instanceof Error ? err.message : 'FTP 连接失败'
+          const message = raw.replace(
+            /^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i,
+            ''
+          )
+          get().updateSessionStatus(session.id, 'error', message)
+        })
+    }
   },
 
   addLocalSession: () => {
@@ -363,7 +472,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     set((s) => ({
       sessions: [...s.sessions, session],
-      activeSessionId: session.id
+      activeSessionId: session.id,
+      workspaceView: 'session'
     }))
     get().assignSessionToFocusedPane(session.id)
   },
@@ -373,7 +483,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!activeSessionId) return
 
     const link = sessions.find((s) => s.id === activeSessionId)
-    if (!link) return
+    if (!link || link.type === 'sftp' || link.type === 'ftp') return
 
     const terminal = createTerminalWindow(nextTerminalTitle(link.terminals))
 
@@ -389,12 +499,26 @@ export const useAppStore = create<AppState>((set, get) => ({
           : sess
       )
     }))
+
+    if (link.type === 'ssh' && link.connectionId) {
+      void window.api.ssh.connect({
+        sessionId: terminal.id,
+        connectionId: link.connectionId,
+        cols: 80,
+        rows: 24
+      })
+    }
   },
 
   removeTerminal: (terminalId) => {
     const { activeSessionId, sessions } = get()
     const link = sessions.find((s) => s.id === activeSessionId)
     if (!link) return
+
+    if (link.type === 'sftp' || link.type === 'ftp') {
+      get().removeSession(link.id)
+      return
+    }
 
     const targetId = terminalId ?? link.activeTerminalId
     if (!targetId) return
@@ -447,9 +571,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
-  addSession: (session) => {    set((s) => ({
+  addSession: (session) => {
+    set((s) => ({
       sessions: [...s.sessions, session],
-      activeSessionId: session.id
+      activeSessionId: session.id,
+      workspaceView: 'session'
     }))
     get().assignSessionToFocusedPane(session.id)
   },
@@ -494,23 +620,48 @@ export const useAppStore = create<AppState>((set, get) => ({
           ? (split.primarySessionId ?? sessions.at(-1)?.id ?? null)
           : s.activeSessionId
 
-      return { sessions, activeSessionId: nextActiveId, split }
+      return {
+        sessions,
+        activeSessionId: nextActiveId,
+        split,
+        workspaceView: sessions.length === 0 ? 'connections' : s.workspaceView
+      }
     })
   },
 
   setActiveSession: (id) => {
-    set({ activeSessionId: id })
+    const session = id ? get().sessions.find((s) => s.id === id) : null
+    const protocolTab =
+      session?.type === 'telnet'
+        ? 'telnet'
+        : session?.type === 'vnc'
+          ? 'vnc'
+          : session?.type === 'ftp'
+            ? 'ftp'
+            : session?.type === 'ssh' || session?.type === 'sftp'
+              ? 'ssh'
+              : get().protocolTab
+
+    set({
+      activeSessionId: id,
+      protocolTab,
+      workspaceView: id ? 'session' : 'connections'
+    })
     if (id) get().assignSessionToFocusedPane(id)
   },
 
-  updateSessionStatus: (terminalId, status, errorMessage) =>
+  updateSessionStatus: (id, status, errorMessage) =>
     set((s) => ({
       sessions: s.sessions.map((link) => {
-        const hasTerminal = link.terminals.some((t) => t.id === terminalId)
+        if ((link.type === 'sftp' || link.type === 'ftp') && link.id === id) {
+          return { ...link, status, errorMessage }
+        }
+
+        const hasTerminal = link.terminals.some((t) => t.id === id)
         if (!hasTerminal) return link
 
         const terminals = link.terminals.map((terminal) =>
-          terminal.id === terminalId ? { ...terminal, status, errorMessage } : terminal
+          terminal.id === id ? { ...terminal, status, errorMessage } : terminal
         )
 
         return {
@@ -551,7 +702,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   assignSessionToFocusedPane: (sessionId) => {
     set((s) => {
       if (!s.split.enabled) {
-        return { activeSessionId: sessionId, split: { ...s.split, primarySessionId: sessionId } }
+        return {
+          activeSessionId: sessionId,
+          workspaceView: 'session',
+          split: { ...s.split, primarySessionId: sessionId }
+        }
       }
 
       const split = { ...s.split }
@@ -560,7 +715,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       } else {
         split.secondarySessionId = sessionId
       }
-      return { activeSessionId: sessionId, split }
+      return { activeSessionId: sessionId, workspaceView: 'session', split }
     })
   }
 }))

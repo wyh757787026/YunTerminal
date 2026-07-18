@@ -62,6 +62,7 @@ function ConnectionRow({
   const toggleFavorite = useAppStore((s) => s.toggleFavorite)
   const deleteConnection = useAppStore((s) => s.deleteConnection)
   const sessions = useAppStore((s) => s.sessions)
+  const protocolTab = useAppStore((s) => s.protocolTab)
   const [menuOpen, setMenuOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -252,8 +253,10 @@ export function ConnectionListPanel(): React.JSX.Element {
     return list
   }, [connections, favorites, recent, protocolTab, connectionSection, searchQuery, sortKey, sortDir])
 
-  const { latencyMap, refreshLatency } = useConnectionLatency(filtered, protocolTab === 'ssh')
-  const { serverInfoMap, refreshServerInfo } = useConnectionServerInfo(filtered, protocolTab === 'ssh')
+  // 不自动探测延迟（并发 TCP 可能干扰正式连接）；仅手动刷新
+  const { latencyMap, refreshLatency } = useConnectionLatency(filtered, false)
+  // 不自动拉取服务器信息（会后台建 SSH，与正式连接并发导致握手失败）；仅手动刷新时获取
+  const { serverInfoMap, refreshServerInfo } = useConnectionServerInfo(filtered, false)
 
   const handleRefresh = (): void => {
     void refreshConnectionData()

@@ -23,6 +23,7 @@ import type { TerminalSettings } from '../../../src/shared/types/settings'
 import { PtyManager } from '../pty/pty-manager'
 import { LocalFs } from '../fs/local-fs'
 import { SftpManager } from '../sftp/sftp-manager'
+import { FtpManager, testFtpConnection } from '../ftp/ftp-manager'
 import { ConnectionStore } from '../store/connection-store'
 import { SettingsStore } from '../store/settings-store'
 import { NoteStore } from '../store/note-store'
@@ -31,6 +32,7 @@ import { MonitorService } from '../monitor/monitor-service'
 import { TunnelManager } from '../tunnel/tunnel-manager'
 import { TunnelStore } from '../store/tunnel-store'
 import { SshManager, testConnection } from '../ssh/ssh-manager'
+import { probeTcpLatency } from '../ssh/ssh-connect'
 import { TelnetManager, testTelnetConnection } from '../telnet/telnet-manager'
 import { VncManager, testVncConnection } from '../vnc/vnc-manager'
 import type {
@@ -67,6 +69,7 @@ export function registerIpcHandlers(
   ptyManager: PtyManager,
   settingsStore: SettingsStore,
   sftpManager: SftpManager,
+  ftpManager: FtpManager,
   localFs: LocalFs,
   tunnelStore: TunnelStore,
   tunnelManager: TunnelManager,
@@ -110,8 +113,15 @@ export function registerIpcHandlers(
     if (connection?.protocol === 'vnc') {
       return testVncConnection(store, connectionId)
     }
+    if (connection?.protocol === 'ftp') {
+      return testFtpConnection(store, connectionId)
+    }
     return testConnection(store, connectionId, sshAuthBridge, credentialStore)
   })
+
+  ipcMain.handle(IPC_CHANNELS.CONNECTION_PROBE_LATENCY, (_, connectionId: string) =>
+    probeTcpLatency(store, connectionId)
+  )
 
   ipcMain.handle(IPC_CHANNELS.CREDENTIAL_LIST, () => credentialStore.listCredentials())
   ipcMain.handle(IPC_CHANNELS.CREDENTIAL_GET, (_, id: string) =>
@@ -329,6 +339,36 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.SFTP_CHMOD, (_, params: SftpChmodParams) =>
     sftpManager.chmod(params.connectionId, params.path, params.mode)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.FTP_CONNECT, (_, connectionId: string) =>
+    ftpManager.connect(connectionId)
+  )
+  ipcMain.handle(IPC_CHANNELS.FTP_DISCONNECT, (_, connectionId: string) => {
+    ftpManager.disconnect(connectionId)
+  })
+  ipcMain.handle(IPC_CHANNELS.FTP_LIST, (_, params: SftpListParams) =>
+    ftpManager.listDir(params.connectionId, params.path)
+  )
+  ipcMain.handle(IPC_CHANNELS.FTP_REALPATH, (_, params: SftpPathParams) =>
+    ftpManager.realpath(params.connectionId, params.path)
+  )
+  ipcMain.handle(IPC_CHANNELS.FTP_UPLOAD, (_, params: SftpTransferParams) =>
+    ftpManager.upload(params.connectionId, params.localPath, params.remotePath, params.transferId)
+  )
+  ipcMain.handle(IPC_CHANNELS.FTP_DOWNLOAD, (_, params: SftpTransferParams) =>
+    ftpManager.download(params.connectionId, params.remotePath, params.localPath, params.transferId)
+  )
+  ipcMain.handle(IPC_CHANNELS.FTP_MKDIR, (_, params: SftpPathParams) =>
+    ftpManager.mkdir(params.connectionId, params.path)
+  )
+  ipcMain.handle(
+    IPC_CHANNELS.FTP_REMOVE,
+    (_, params: SftpPathParams & { isDirectory: boolean }) =>
+      ftpManager.remove(params.connectionId, params.path, params.isDirectory)
+  )
+  ipcMain.handle(IPC_CHANNELS.FTP_RENAME, (_, params: SftpRenameParams) =>
+    ftpManager.rename(params.connectionId, params.oldPath, params.newPath)
   )
 
   ipcMain.handle(IPC_CHANNELS.LOCAL_HOME, () => localFs.getHomeDir())

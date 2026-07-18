@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs'
 import type { Duplex } from 'stream'
+import net from 'net'
 import { Client, type Algorithms, type ConnectConfig } from 'ssh2'
 import type {
   AuthType,
@@ -16,6 +17,37 @@ export interface CreateSshClientOptions {
   sessionId?: string
   authBridge?: SshAuthBridge
   credentialStore?: CredentialStore
+  signal?: AbortSignal
+}
+
+const ABORT_ERROR_MESSAGE = '连接已取消'
+
+export function isSshAbortError(err: unknown): boolean {
+  return err instanceof Error && err.message === ABORT_ERROR_MESSAGE
+}
+
+export function formatSshError(err: unknown): string {
+  if (isSshAbortError(err)) return ABORT_ERROR_MESSAGE
+  const message = err instanceof Error ? err.message : '连接失败'
+  if (message.includes('Connection lost before handshake')) {
+    return '连接在 SSH 握手完成前断开。请检查主机/端口、网络，或避免重复快速重连'
+  }
+  if (message.includes('Timed out while waiting for handshake')) {
+    return 'SSH 握手超时，请检查网络或增大连接超时时间'
+  }
+  if (message.includes('All configured authentication methods failed')) {
+    return '认证失败，请检查用户名、密码或私钥'
+  }
+  if (message.includes('ECONNREFUSED')) {
+    return '无法连接：目标拒绝连接（请检查主机与端口）'
+  }
+  if (message.includes('ENOTFOUND') || message.includes('getaddrinfo')) {
+    return '无法解析主机名，请检查地址是否正确'
+  }
+  if (message.includes('ECONNRESET')) {
+    return '连接被重置，请检查网络或服务器 SSH 服务'
+  }
+  return message
 }
 
 interface ConnectClientOptions {
@@ -24,6 +56,7 @@ interface ConnectClientOptions {
   connectionId: string
   connectionName: string
   defaultPassword?: string
+  signal?: AbortSignal
 }
 
 function normalizeFingerprint(value: string): string {
@@ -194,12 +227,44 @@ export function connectClient(
   options: ConnectClientOptions
 ): Promise<Client> {
   return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new Error(ABORT_ERROR_MESSAGE))
+      return
+    }
+
     const client = new Client()
+    let settled = false
+
+    const settle = (fn: () => void): void => {
+      if (settled) return
+      settled = true
+      options.signal?.removeEventListener('abort', onAbort)
+      fn()
+    }
+
+    const onAbort = (): void => {
+      settle(() => {
+        try {
+          client.end()
+        } catch {
+          // ignore
+        }
+        reject(new Error(ABORT_ERROR_MESSAGE))
+      })
+    }
+
+    options.signal?.addEventListener('abort', onAbort, { once: true })
 
     if (config.tryKeyboard && options.authBridge) {
       client.on('keyboard-interactive', (name, instructions, _lang, prompts, finish) => {
         void (async () => {
           try {
+            if (options.signal?.aborted) {
+              finish([])
+              client.end()
+              return
+            }
+
             const autoResponses = prompts.map((prompt) => {
               if (!prompt.echo && options.defaultPassword) {
                 return options.defaultPassword
@@ -241,16 +306,28 @@ export function connectClient(
 
             finish(answers)
           } catch (err) {
-            reject(err instanceof Error ? err : new Error('交互认证失败'))
-            client.end()
+            settle(() => {
+              reject(err instanceof Error ? err : new Error('交互认证失败'))
+              client.end()
+            })
           }
         })()
       })
     }
 
     client
-      .on('ready', () => resolve(client))
-      .on('error', reject)
+      .on('ready', () => {
+        settle(() => resolve(client))
+      })
+      .on('error', (err) => {
+        settle(() => {
+          if (options.signal?.aborted) {
+            reject(new Error(ABORT_ERROR_MESSAGE))
+            return
+          }
+          reject(err)
+        })
+      })
       .connect(config)
   })
 }
@@ -286,12 +363,14 @@ export async function establishJumpChain(
       sessionId: options?.sessionId,
       connectionId: firstHop.id,
       connectionName: firstHop.name,
-      defaultPassword: store.getConnectionSecrets(firstHop.id).password
+      defaultPassword: store.getConnectionSecrets(firstHop.id).password,
+      signal: options?.signal
     }
   )
   jumpClients.push(currentClient)
 
   for (let i = 1; i < proxyChain.length; i++) {
+    if (options?.signal?.aborted) throw new Error(ABORT_ERROR_MESSAGE)
     const hop = store.getConnection(proxyChain[i])
     if (!hop) throw new Error(`跳板机不存在: ${proxyChain[i]}`)
     const stream = await openForwardStream(currentClient, hop.host, hop.port)
@@ -305,7 +384,8 @@ export async function establishJumpChain(
         sessionId: options?.sessionId,
         connectionId: hop.id,
         connectionName: hop.name,
-        defaultPassword: store.getConnectionSecrets(hop.id).password
+        defaultPassword: store.getConnectionSecrets(hop.id).password,
+        signal: options?.signal
       }
     )
     jumpClients.push(currentClient)
@@ -320,35 +400,112 @@ export async function createSshClient(
   connectionId: string,
   options?: CreateSshClientOptions
 ): Promise<{ client: Client; jumpClients: Client[] }> {
+  if (options?.signal?.aborted) throw new Error(ABORT_ERROR_MESSAGE)
+
   const connection = store.getConnection(connectionId)
   if (!connection) throw new Error('连接配置不存在')
 
-  const secrets = await resolveConnectionSecrets(connection, store, options)
-  let jumpClients: Client[] = []
-  let config = buildConnectConfig(connection, secrets)
+  // 同一 host:port 串行握手，避免列表延迟检测/服务器信息与正式连接并发导致握手失败
+  const lockKey = `${connection.host}:${connection.port}`
+  return withHostLock(lockKey, async () => {
+    if (options?.signal?.aborted) throw new Error(ABORT_ERROR_MESSAGE)
 
-  if (connection.proxyChain && connection.proxyChain.length > 0) {
-    const chain = await establishJumpChain(store, connection.proxyChain, connection, options)
-    jumpClients = chain.jumpClients
-    config = { ...config, sock: chain.sock }
-  } else if (connection.ssh?.proxyUrl?.trim()) {
-    const sock = await createProxySocket(
-      connection.ssh.proxyUrl.trim(),
-      connection.host,
-      connection.port
-    )
-    config = { ...config, sock }
+    const secrets = await resolveConnectionSecrets(connection, store, options)
+    if (options?.signal?.aborted) throw new Error(ABORT_ERROR_MESSAGE)
+
+    let jumpClients: Client[] = []
+    let config = buildConnectConfig(connection, secrets)
+
+    if (connection.proxyChain && connection.proxyChain.length > 0) {
+      const chain = await establishJumpChain(store, connection.proxyChain, connection, options)
+      jumpClients = chain.jumpClients
+      config = { ...config, sock: chain.sock }
+    } else if (connection.ssh?.proxyUrl?.trim()) {
+      const sock = await createProxySocket(
+        connection.ssh.proxyUrl.trim(),
+        connection.host,
+        connection.port
+      )
+      config = { ...config, sock }
+    }
+
+    if (options?.signal?.aborted) {
+      for (const jump of jumpClients) jump.end()
+      throw new Error(ABORT_ERROR_MESSAGE)
+    }
+
+    const client = await connectClient(config, {
+      authBridge: options?.authBridge,
+      sessionId: options?.sessionId,
+      connectionId,
+      connectionName: connection.name,
+      defaultPassword: secrets.password,
+      signal: options?.signal
+    })
+
+    return { client, jumpClients }
+  })
+}
+
+const hostLocks = new Map<string, Promise<void>>()
+
+async function withHostLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const previous = hostLocks.get(key) ?? Promise.resolve()
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const next = previous.catch(() => undefined).then(() => gate)
+  hostLocks.set(key, next)
+
+  await previous.catch(() => undefined)
+  try {
+    return await fn()
+  } finally {
+    release()
+    if (hostLocks.get(key) === next) {
+      hostLocks.delete(key)
+    }
+  }
+}
+
+/** 仅 TCP 探测，不走 SSH 握手，避免与正式连接并发冲突 */
+export function probeTcpLatency(
+  store: ConnectionStore,
+  connectionId: string,
+  timeoutMs = 5000
+): Promise<{ success: boolean; latencyMs?: number; message?: string }> {
+  const connection = store.getConnection(connectionId)
+  if (!connection) {
+    return Promise.resolve({ success: false, message: '连接配置不存在' })
+  }
+  if (connection.protocol === 'rdp') {
+    return Promise.resolve({ success: false, message: 'RDP 暂不支持延迟检测' })
   }
 
-  const client = await connectClient(config, {
-    authBridge: options?.authBridge,
-    sessionId: options?.sessionId,
-    connectionId,
-    connectionName: connection.name,
-    defaultPassword: secrets.password
-  })
+  return new Promise((resolve) => {
+    const startedAt = Date.now()
+    const socket = net.connect({ host: connection.host, port: connection.port })
+    let settled = false
 
-  return { client, jumpClients }
+    const done = (result: { success: boolean; latencyMs?: number; message?: string }): void => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      resolve(result)
+    }
+
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => {
+      done({ success: true, latencyMs: Date.now() - startedAt })
+    })
+    socket.once('timeout', () => {
+      done({ success: false, message: '连接超时' })
+    })
+    socket.once('error', (err) => {
+      done({ success: false, message: err.message })
+    })
+  })
 }
 
 export function getShellOptions(connection: StoredConnection): {

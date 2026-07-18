@@ -1,6 +1,5 @@
-import { Activity, FolderOpen, Film, Network, StickyNote, X } from 'lucide-react'
+import { Activity, Film, Network, StickyNote, X } from 'lucide-react'
 import { useAppStore, type BottomPanelTab } from '@renderer/stores/app-store'
-import { SftpBrowser } from '@renderer/components/sftp/SftpBrowser'
 import { TunnelPanel } from '@renderer/components/tunnel/TunnelPanel'
 import { NotesPanel } from '@renderer/components/notes/NotesPanel'
 import { ErrorBoundary } from '@renderer/components/common/ErrorBoundary'
@@ -11,7 +10,6 @@ import { BOTTOM_PANEL_HEIGHT_CLASS } from './layout-constants'
 type PanelTab = BottomPanelTab
 
 const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
-  { id: 'sftp', label: '文件传输', icon: <FolderOpen size={13} /> },
   { id: 'tunnel', label: '端口转发', icon: <Network size={13} /> },
   { id: 'notes', label: '笔记', icon: <StickyNote size={13} /> },
   { id: 'monitor', label: '监控', icon: <Activity size={13} /> },
@@ -46,7 +44,6 @@ export function BottomPanel(): React.JSX.Element | null {
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden p-1">
-        {bottomPanelTab === 'sftp' && <SftpBrowser />}
         {bottomPanelTab === 'tunnel' && <TunnelPanel />}
         {bottomPanelTab === 'notes' && <NotesPanel />}
         {bottomPanelTab === 'monitor' && (

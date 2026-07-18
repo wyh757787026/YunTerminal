@@ -1,7 +1,7 @@
 import type { VncSettings } from './vnc'
 
 export type AuthType = 'password' | 'key' | 'keyboard-interactive' | 'prompt' | 'credential'
-export type ConnectionProtocol = 'ssh' | 'rdp' | 'telnet' | 'vnc'
+export type ConnectionProtocol = 'ssh' | 'rdp' | 'telnet' | 'vnc' | 'ftp'
 export type RdpDisplayMode = 'followWindow' | 'fixed'
 export type RdpRenderQuality = 'balanced' | 'performance' | 'quality'
 
@@ -37,6 +37,21 @@ export interface TelnetSettings {
   passwordPrompt?: string
 }
 
+/** plain=明文 FTP；explicit=显式 FTPS（AUTH TLS，常见 21）；implicit=隐式 FTPS（常见 990） */
+export type FtpSecureMode = 'plain' | 'explicit' | 'implicit'
+
+export interface FtpSettings {
+  /** 加密方式；优先于旧字段 secure */
+  secureMode?: FtpSecureMode
+  /** @deprecated 使用 secureMode；true 等价于 explicit */
+  secure?: boolean
+  /**
+   * 传输模式：true=被动(PASV，默认)，false=主动(PORT)
+   * @default true
+   */
+  passive?: boolean
+}
+
 export interface Connection {
   id: string
   name: string
@@ -54,6 +69,7 @@ export interface Connection {
   rdp?: RdpSettings
   telnet?: TelnetSettings
   vnc?: VncSettings
+  ftp?: FtpSettings
   favorite?: boolean
   sortOrder: number
   createdAt: string
@@ -82,6 +98,7 @@ export interface ConnectionInput {
   rdp?: RdpSettings
   telnet?: TelnetSettings
   vnc?: VncSettings
+  ftp?: FtpSettings
   favorite?: boolean
   secrets?: ConnectionSecrets
 }

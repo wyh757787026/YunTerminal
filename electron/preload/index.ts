@@ -88,6 +88,8 @@ const api = {
     delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_DELETE, id),
     test: (id: string): Promise<ConnectionTestResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_TEST, id),
+    probeLatency: (id: string): Promise<ConnectionTestResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_PROBE_LATENCY, id),
     toggleFavorite: (id: string): Promise<StoredConnection | null> =>
       ipcRenderer.invoke(IPC_CHANNELS.CONNECTION_TOGGLE_FAVORITE, id),
     move: (params: ConnectionMoveParams): Promise<StoredConnection | null> =>
@@ -231,6 +233,31 @@ const api = {
       const listener = (_: IpcRendererEvent, event: SftpTransferProgress): void => callback(event)
       ipcRenderer.on(IPC_CHANNELS.SFTP_TRANSFER_PROGRESS, listener)
       return () => ipcRenderer.removeListener(IPC_CHANNELS.SFTP_TRANSFER_PROGRESS, listener)
+    }
+  },
+  ftp: {
+    connect: (connectionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_CONNECT, connectionId),
+    disconnect: (connectionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_DISCONNECT, connectionId),
+    list: (params: SftpListParams): Promise<FileEntry[]> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_LIST, params),
+    realpath: (params: SftpPathParams): Promise<string> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_REALPATH, params),
+    upload: (params: SftpTransferParams): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_UPLOAD, params),
+    download: (params: SftpTransferParams): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_DOWNLOAD, params),
+    mkdir: (params: SftpPathParams): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_MKDIR, params),
+    remove: (params: SftpPathParams & { isDirectory: boolean }): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_REMOVE, params),
+    rename: (params: SftpRenameParams): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_RENAME, params),
+    onTransferProgress: (callback: (event: SftpTransferProgress) => void): (() => void) => {
+      const listener = (_: IpcRendererEvent, event: SftpTransferProgress): void => callback(event)
+      ipcRenderer.on(IPC_CHANNELS.FTP_TRANSFER_PROGRESS, listener)
+      return () => ipcRenderer.removeListener(IPC_CHANNELS.FTP_TRANSFER_PROGRESS, listener)
     }
   },
   local: {

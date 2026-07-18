@@ -1,5 +1,5 @@
 import { useAppStore } from '@renderer/stores/app-store'
-import { SftpFileTree } from '@renderer/components/sftp/SftpFileTree'
+import { FtpBrowser } from '@renderer/components/ftp/FtpBrowser'
 import { TerminalArea } from './TerminalArea'
 
 function PanelChrome({
@@ -29,16 +29,20 @@ export function SessionWorkspace(): React.JSX.Element {
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
   const activeSession = sessions.find((s) => s.id === activeSessionId)
-  const isSsh = activeSession?.type === 'ssh' && Boolean(activeSession.connectionId)
+  const isFtp = activeSession?.type === 'ftp'
+
+  if (isFtp) {
+    return (
+      <div className="flex h-full min-h-0 flex-1 gap-2 p-2 pt-1">
+        <PanelChrome title="FTP" className="min-h-0 min-w-0 flex-1">
+          <FtpBrowser />
+        </PanelChrome>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-1 gap-2 p-2 pt-1">
-      {isSsh && (
-        <PanelChrome title="文件工作区" className="w-[240px] shrink-0">
-          <SftpFileTree />
-        </PanelChrome>
-      )}
-
       <PanelChrome className="min-h-0 min-w-0 flex-1">
         <TerminalArea embedded />
       </PanelChrome>

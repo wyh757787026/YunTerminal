@@ -1,6 +1,9 @@
 import {
+  accessSync,
+  constants,
   existsSync,
   mkdirSync,
+  opendirSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -10,7 +13,7 @@ import {
   writeFileSync
 } from 'fs'
 import { homedir } from 'os'
-import { basename, dirname, join, resolve } from 'path'
+import { basename, dirname, join, resolve, sep } from 'path'
 import type { FileEntry } from '../../../src/shared/types/sftp'
 
 function formatPermissions(mode: number): string {
@@ -22,17 +25,69 @@ function formatPermissions(mode: number): string {
   return `${prefix}${owner}${group}${other}`
 }
 
-function toEntry(fullPath: string, name: string): FileEntry {
-  const stat = statSync(fullPath)
-  return {
-    name,
-    path: fullPath,
-    isDirectory: stat.isDirectory(),
-    size: stat.size,
-    modifiedAt: stat.mtime.toISOString(),
-    permissions: formatPermissions(stat.mode),
-    mode: stat.mode & 0o777
+function toAccessErrorMessage(err: unknown, path: string): string {
+  const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+  if (code === 'EPERM' || code === 'EACCES') {
+    return `无权访问：${path}`
   }
+  if (code === 'EBUSY') {
+    return `资源正忙或被锁定：${path}`
+  }
+  if (code === 'ENOENT') {
+    return `路径不存在：${path}`
+  }
+  if (err instanceof Error && err.message) {
+    return err.message
+  }
+  return `无法读取目录：${path}`
+}
+
+function toEntry(fullPath: string, name: string, isDirectoryHint?: boolean): FileEntry | null {
+  try {
+    const stat = statSync(fullPath)
+    return {
+      name,
+      path: fullPath,
+      isDirectory: stat.isDirectory(),
+      size: stat.size,
+      modifiedAt: stat.mtime.toISOString(),
+      permissions: formatPermissions(stat.mode),
+      mode: stat.mode & 0o777
+    }
+  } catch {
+    // Locked files (EBUSY etc.): show using Dirent hint when available
+    if (isDirectoryHint === undefined) return null
+    if (isDirectoryHint) return null // inaccessible dirs are skipped via canListDir
+    return {
+      name,
+      path: fullPath,
+      isDirectory: false,
+      size: 0,
+      modifiedAt: new Date(0).toISOString(),
+      permissions: '----------',
+      mode: 0
+    }
+  }
+}
+
+function canListDir(dirPath: string): boolean {
+  try {
+    accessSync(dirPath, constants.R_OK)
+    const handle = opendirSync(dirPath)
+    handle.closeSync()
+    return true
+  } catch {
+    return false
+  }
+}
+
+function isWindowsComputerRoot(dirPath: string): boolean {
+  const trimmed = dirPath.trim()
+  return trimmed === '' || trimmed === '/' || trimmed === '\\'
+}
+
+function isWindowsDriveRoot(dirPath: string): boolean {
+  return /^[A-Za-z]:[\\/]?$/.test(dirPath.trim())
 }
 
 export class LocalFs {
@@ -40,19 +95,69 @@ export class LocalFs {
     return homedir()
   }
 
+  listWindowsDrives(): FileEntry[] {
+    const drives: FileEntry[] = []
+    for (let code = 65; code <= 90; code += 1) {
+      const letter = String.fromCharCode(code)
+      const root = `${letter}:${sep}`
+      try {
+        if (!existsSync(root)) continue
+        if (!canListDir(root)) continue
+        drives.push({
+          name: `${letter}:`,
+          path: root,
+          isDirectory: true,
+          size: 0,
+          modifiedAt: new Date().toISOString(),
+          permissions: 'drwxrwxrwx',
+          mode: 0o755
+        })
+      } catch {
+        // Skip inaccessible drive letters
+      }
+    }
+    return drives
+  }
+
   listDir(dirPath: string): FileEntry[] {
-    const resolved = resolve(dirPath)
-    if (!existsSync(resolved)) {
-      throw new Error('路径不存在')
+    if (process.platform === 'win32' && isWindowsComputerRoot(dirPath)) {
+      return this.listWindowsDrives()
     }
 
-    const entries = readdirSync(resolved, { withFileTypes: true })
-    return entries
-      .map((entry) => toEntry(join(resolved, entry.name), entry.name))
-      .sort((a, b) => {
-        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
-        return a.name.localeCompare(b.name)
-      })
+    const resolved =
+      process.platform === 'win32' && isWindowsDriveRoot(dirPath)
+        ? `${dirPath.trim().charAt(0).toUpperCase()}:${sep}`
+        : resolve(dirPath)
+
+    if (!existsSync(resolved)) {
+      throw new Error(`路径不存在：${resolved}`)
+    }
+
+    let entries: Array<{ name: string; isDirectory: () => boolean }>
+    try {
+      entries = readdirSync(resolved, { withFileTypes: true })
+    } catch (err) {
+      throw new Error(toAccessErrorMessage(err, resolved))
+    }
+
+    const result: FileEntry[] = []
+
+    for (const entry of entries) {
+      const fullPath = join(resolved, entry.name)
+
+      // Skip protected system folders (Config.Msi, System Volume Information, ...)
+      if (entry.isDirectory() && !canListDir(fullPath)) {
+        continue
+      }
+
+      const mapped = toEntry(fullPath, entry.name, entry.isDirectory())
+      if (mapped) result.push(mapped)
+    }
+
+    return result.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
   }
 
   readFile(filePath: string): string {
@@ -89,10 +194,18 @@ export class LocalFs {
   }
 
   getParentPath(filePath: string): string {
+    if (process.platform === 'win32') {
+      if (isWindowsComputerRoot(filePath)) return '/'
+      if (isWindowsDriveRoot(filePath)) return '/'
+    }
     return dirname(resolve(filePath))
   }
 
   joinPath(dir: string, name: string): string {
+    if (process.platform === 'win32' && isWindowsComputerRoot(dir)) {
+      const drive = name.replace(/[:\\/]+$/, '')
+      return `${drive}:${sep}`
+    }
     return join(resolve(dir), name)
   }
 

@@ -16,6 +16,8 @@ export function filterByProtocol(
       return connections.filter((c) => c.protocol === 'vnc')
     case 'tunnel':
       return connections.filter((c) => (c.protocol ?? 'ssh') === 'ssh')
+    case 'ftp':
+      return connections.filter((c) => c.protocol === 'ftp')
     default: {
       const _exhaustive: never = tab
       return _exhaustive
@@ -76,6 +78,8 @@ export function getProtocolLabel(tab: ProtocolTab): string {
       return '隧道'
     case 'vnc':
       return 'VNC'
+    case 'ftp':
+      return 'FTP'
     default: {
       const _exhaustive: never = tab
       return _exhaustive
