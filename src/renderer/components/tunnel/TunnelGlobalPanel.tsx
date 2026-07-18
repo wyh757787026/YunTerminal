@@ -93,9 +93,9 @@ export function TunnelGlobalPanel(): React.JSX.Element {
   )
 
   const sectionConnectionIds = useMemo(() => {
-    const list = filterByProtocol(connections, 'ssh')
-    const sectionList = filterBySection(list, connectionSection, favorites, recent)
-    const searched = filterBySearch(sectionList, searchQuery)
+    const sectionList = filterBySection(connections, connectionSection, favorites, recent)
+    const list = filterByProtocol(sectionList, 'ssh')
+    const searched = filterBySearch(list, searchQuery)
     return new Set(searched.map((c) => c.id))
   }, [connections, connectionSection, favorites, recent, searchQuery])
 

@@ -4,6 +4,7 @@ import {
   Copy,
   Eye,
   EyeOff,
+  HardDrive,
   Monitor,
   MoreVertical,
   Plus,
@@ -62,12 +63,12 @@ function ConnectionRow({
   const toggleFavorite = useAppStore((s) => s.toggleFavorite)
   const deleteConnection = useAppStore((s) => s.deleteConnection)
   const sessions = useAppStore((s) => s.sessions)
-  const protocolTab = useAppStore((s) => s.protocolTab)
   const [menuOpen, setMenuOpen] = useState(false)
   const [copied, setCopied] = useState(false)
 
   const isRdp = connection.protocol === 'rdp'
   const isVnc = connection.protocol === 'vnc'
+  const isFtp = connection.protocol === 'ftp'
   const activeSession = sessions.find(
     (s) => s.connectionId === connection.id && s.status !== 'disconnected'
   )
@@ -113,6 +114,8 @@ function ConnectionRow({
             <Monitor size={14} className="text-accent" />
           ) : isVnc ? (
             <Scan size={14} className="text-accent" />
+          ) : isFtp ? (
+            <HardDrive size={14} className="text-accent" />
           ) : (
             <Server size={14} className="text-accent" />
           )}
@@ -241,8 +244,9 @@ export function ConnectionListPanel(): React.JSX.Element {
   const protocolLabel = getProtocolLabel(protocolTab)
 
   const filtered = useMemo(() => {
-    let list = filterByProtocol(connections, protocolTab)
-    list = filterBySection(list, connectionSection, favorites, recent)
+    // 先按分区取列表，再按当前协议过滤（最近/收藏也必须同类型）
+    let list = filterBySection(connections, connectionSection, favorites, recent)
+    list = filterByProtocol(list, protocolTab)
     list = filterBySearch(list, searchQuery)
     list.sort((a, b) => {
       const av = sortKey === 'name' ? a.name : a.host

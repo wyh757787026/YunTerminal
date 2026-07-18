@@ -149,7 +149,9 @@ function FilePane({
                     e.dataTransfer.effectAllowed = 'copy'
                   }}
                   className={`h-6 cursor-pointer border-b border-surface-border/50 hover:bg-surface-overlay ${
-                    selected.has(entry.path) ? 'bg-surface-overlay' : ''
+                    selected.has(entry.path)
+                      ? 'bg-accent/20 text-accent shadow-[inset_3px_0_0_0_rgb(var(--c-accent))]'
+                      : ''
                   }`}
                   onClick={(e) => onSelect(entry.path, e.ctrlKey || e.metaKey)}
                   onDoubleClick={() => {

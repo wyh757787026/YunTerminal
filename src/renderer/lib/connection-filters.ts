@@ -35,8 +35,10 @@ export function filterBySection(
     case 'all':
       return connections
     case 'favorites':
+      // 调用方需再按协议过滤；此处返回完整收藏顺序
       return favorites
     case 'recent':
+      // 调用方需再按协议过滤；此处返回完整最近顺序
       return recent
     case 'common':
       return connections.filter(

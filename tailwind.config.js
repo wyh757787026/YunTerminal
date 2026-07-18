@@ -22,7 +22,8 @@ export default {
         terminal: {
           bg: 'rgb(var(--c-terminal-bg) / <alpha-value>)',
           fg: 'rgb(var(--c-terminal-fg) / <alpha-value>)'
-        }
+        },
+        warning: 'rgb(var(--c-warning) / <alpha-value>)'
       },
       fontFamily: {
         mono: ['JetBrains Mono', 'Cascadia Code', 'Consolas', 'monospace'],

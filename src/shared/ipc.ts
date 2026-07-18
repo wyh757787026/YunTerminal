@@ -81,7 +81,9 @@ export const IPC_CHANNELS = {
   FTP_MKDIR: 'ftp:mkdir',
   FTP_REMOVE: 'ftp:remove',
   FTP_RENAME: 'ftp:rename',
+  FTP_COPY: 'ftp:copy',
   FTP_TRANSFER_PROGRESS: 'ftp:transfer-progress',
+  FTP_ABORT_TRANSFER: 'ftp:abort-transfer',
 
   LOCAL_HOME: 'local:home',
   LOCAL_LIST: 'local:list',

@@ -41,10 +41,27 @@ function GroupTreeNode({
   const childGroups = allGroups.filter((g) => g.parentId === group.id)
   const sectionId: ConnectionSection = `group:${group.id}`
   const isActive = connectionSection === sectionId
-  const count = connections.filter((c) => {
-    const matchGroup = (c.groupId ?? 'default') === group.id
-    return matchGroup && matchesProtocolTab(c.protocol, protocolTab)
-  }).length
+
+  const protocolConnections = connections.filter((c) =>
+    matchesProtocolTab(c.protocol, protocolTab)
+  )
+  const count = protocolConnections.filter(
+    (c) => (c.groupId ?? 'default') === group.id
+  ).length
+
+  const visibleChildren = childGroups.filter((child) => {
+    const hasDirect = protocolConnections.some(
+      (c) => (c.groupId ?? 'default') === child.id
+    )
+    if (hasDirect) return true
+    const walk = (id: string): boolean =>
+      allGroups.some(
+        (g) =>
+          g.parentId === id &&
+          (protocolConnections.some((c) => (c.groupId ?? 'default') === g.id) || walk(g.id))
+      )
+    return walk(child.id)
+  })
 
   return (
     <div>
@@ -60,7 +77,7 @@ function GroupTreeNode({
             setExpanded((v) => !v)
           }}
         >
-          {childGroups.length > 0 ? (
+          {visibleChildren.length > 0 ? (
             expanded ? (
               <ChevronDown size={12} />
             ) : (
@@ -75,7 +92,7 @@ function GroupTreeNode({
         <span className="ml-auto text-[11px] text-accent-muted">({count})</span>
       </button>
       {expanded &&
-        childGroups.map((child) => (
+        visibleChildren.map((child) => (
           <GroupTreeNode key={child.id} group={child} allGroups={allGroups} depth={depth + 1} />
         ))}
     </div>
@@ -98,20 +115,39 @@ export function ConnectionTreeSidebar(): React.JSX.Element {
     refreshConnectionData
   } = useAppStore()
 
-  const rootGroups = groups.filter((g) => !g.parentId)
   const protocolLabel = getProtocolLabel(protocolTab)
+
+  const protocolConnections = useMemo(
+    () => connections.filter((c) => matchesProtocolTab(c.protocol, protocolTab)),
+    [connections, protocolTab]
+  )
 
   const counts = useMemo(() => {
     const byProtocol = (list: typeof connections) =>
       list.filter((c) => matchesProtocolTab(c.protocol, protocolTab))
     return {
+      all: protocolConnections.length,
       favorites: byProtocol(favorites).length,
       recent: byProtocol(recent).length,
       common: byProtocol(
         connections.filter((c) => c.tags?.some((t) => t === '常用' || t.toLowerCase() === 'common'))
       ).length
     }
-  }, [connections, favorites, recent, protocolTab])
+  }, [connections, favorites, recent, protocolTab, protocolConnections])
+
+  /** 当前协议下有连接（含子孙分组）的分组才显示 */
+  const visibleRootGroups = useMemo(() => {
+    const protocolIds = new Set(protocolConnections.map((c) => c.groupId ?? 'default'))
+
+    const groupHasProtocolConnection = (groupId: string): boolean => {
+      if (protocolIds.has(groupId)) return true
+      return groups.some(
+        (g) => g.parentId === groupId && groupHasProtocolConnection(g.id)
+      )
+    }
+
+    return groups.filter((g) => !g.parentId && groupHasProtocolConnection(g.id))
+  }, [groups, protocolConnections])
 
   const sectionButton = (id: ConnectionSection, label: string, count: number): React.JSX.Element => (
     <button
@@ -164,15 +200,19 @@ export function ConnectionTreeSidebar(): React.JSX.Element {
 
       <div className="flex-1 overflow-y-auto p-2">
         <p className="section-label mb-1">全部</p>
-        {sectionButton('all', '全部', connections.length)}
+        {sectionButton('all', '全部', counts.all)}
         {sectionButton('recent', '最近', counts.recent)}
         {sectionButton('common', '常用', counts.common)}
         {sectionButton('favorites', '收藏', counts.favorites)}
 
         <p className="section-label mb-1 mt-3">分组</p>
-        {rootGroups.map((group) => (
-          <GroupTreeNode key={group.id} group={group} allGroups={groups} />
-        ))}
+        {visibleRootGroups.length === 0 ? (
+          <p className="px-2 py-1 text-[11px] text-accent-muted/70">当前协议暂无分组连接</p>
+        ) : (
+          visibleRootGroups.map((group) => (
+            <GroupTreeNode key={group.id} group={group} allGroups={groups} />
+          ))
+        )}
       </div>
     </div>
   )

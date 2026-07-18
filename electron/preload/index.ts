@@ -240,6 +240,8 @@ const api = {
       ipcRenderer.invoke(IPC_CHANNELS.FTP_CONNECT, connectionId),
     disconnect: (connectionId: string): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FTP_DISCONNECT, connectionId),
+    abortTransfer: (connectionId: string): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_ABORT_TRANSFER, connectionId),
     list: (params: SftpListParams): Promise<FileEntry[]> =>
       ipcRenderer.invoke(IPC_CHANNELS.FTP_LIST, params),
     realpath: (params: SftpPathParams): Promise<string> =>
@@ -254,6 +256,8 @@ const api = {
       ipcRenderer.invoke(IPC_CHANNELS.FTP_REMOVE, params),
     rename: (params: SftpRenameParams): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.FTP_RENAME, params),
+    copy: (params: SftpRenameParams): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.FTP_COPY, params),
     onTransferProgress: (callback: (event: SftpTransferProgress) => void): (() => void) => {
       const listener = (_: IpcRendererEvent, event: SftpTransferProgress): void => callback(event)
       ipcRenderer.on(IPC_CHANNELS.FTP_TRANSFER_PROGRESS, listener)

@@ -347,6 +347,9 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.FTP_DISCONNECT, (_, connectionId: string) => {
     ftpManager.disconnect(connectionId)
   })
+  ipcMain.handle(IPC_CHANNELS.FTP_ABORT_TRANSFER, (_, connectionId: string) => {
+    ftpManager.abortTransfer(connectionId)
+  })
   ipcMain.handle(IPC_CHANNELS.FTP_LIST, (_, params: SftpListParams) =>
     ftpManager.listDir(params.connectionId, params.path)
   )
@@ -369,6 +372,9 @@ export function registerIpcHandlers(
   )
   ipcMain.handle(IPC_CHANNELS.FTP_RENAME, (_, params: SftpRenameParams) =>
     ftpManager.rename(params.connectionId, params.oldPath, params.newPath)
+  )
+  ipcMain.handle(IPC_CHANNELS.FTP_COPY, (_, params: SftpRenameParams) =>
+    ftpManager.copy(params.connectionId, params.oldPath, params.newPath)
   )
 
   ipcMain.handle(IPC_CHANNELS.LOCAL_HOME, () => localFs.getHomeDir())

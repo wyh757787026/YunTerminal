@@ -14,6 +14,9 @@ class DeferredDataSocket extends Duplex {
   private pendingTimeoutMs: number | undefined
   private pendingTimeoutCb: (() => void) | undefined
   private server: net.Server | null = null
+  /** 自行累计，供 basic-ftp ProgressTracker 读取（勿依赖代理层原生计数） */
+  private uploadedBytes = 0
+  private downloadedBytes = 0
 
   bindServer(server: net.Server): void {
     this.server = server
@@ -26,6 +29,7 @@ class DeferredDataSocket extends Duplex {
     }
     this.target = socket
     socket.on('data', (chunk: Buffer) => {
+      this.downloadedBytes += chunk.length
       if (!this.push(chunk)) socket.pause()
     })
     socket.on('end', () => {
@@ -45,18 +49,36 @@ class DeferredDataSocket extends Duplex {
     }
     this.writeQueue = []
     if (this.endRequested) socket.end()
-    if ('encrypted' in socket) {
-      this.emit('secureConnect')
-    }
+    // 若 uploadFrom 已在等 secureConnect（数据连接晚于 150），在此唤醒。
+    this.emit('secureConnect')
   }
 
-  /** basic-ftp 上传前用 getCipher 判断 TLS 是否就绪 */
+  /**
+   * basic-ftp 的 uploadFrom：
+   *   canUpload = ("getCipher" in socket) ? getCipher() !== undefined : true
+   * 因此本代理必须提供 getCipher。明文已就绪时返回占位 cipher，避免：
+   * 数据连接先于 150 到达 → attach 时 secureConnect 已发出 → 随后才注册监听 → 永久挂起
+   * → 最终 Timeout (control socket)。
+   */
   getCipher(): tls.CipherNameAndProtocol | undefined {
     const sock = this.target
-    if (sock && 'getCipher' in sock && typeof sock.getCipher === 'function') {
+    if (!sock) return undefined
+    if (sock instanceof tls.TLSSocket) {
       return sock.getCipher() ?? undefined
     }
-    return undefined
+    return { name: 'CLEAR', standardName: 'CLEAR', version: 'CLEAR' }
+  }
+
+  /**
+   * basic-ftp ProgressTracker 用 socket.bytesRead + bytesWritten 统计进度。
+   * 在 _write / data 中自行累计，避免代理 Duplex 一直为 0 导致界面显示 0%。
+   */
+  get bytesRead(): number {
+    return this.downloadedBytes
+  }
+
+  get bytesWritten(): number {
+    return this.uploadedBytes
   }
 
   setTimeout(ms: number, callback?: () => void): this {
@@ -75,6 +97,7 @@ class DeferredDataSocket extends Duplex {
     _encoding: BufferEncoding,
     callback: (error?: Error | null) => void
   ): void {
+    this.uploadedBytes += chunk.length
     if (!this.target) {
       this.writeQueue.push(Buffer.from(chunk))
       callback()
