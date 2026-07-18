@@ -1,0 +1,320 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html,
+  body,
+  #root {
+    @apply h-full w-full overflow-hidden;
+  }
+
+  body {
+    @apply m-0 font-sans text-terminal-fg antialiased;
+    background: rgb(var(--c-surface-muted));
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-surface-border/80;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-accent-muted;
+  }
+
+  [data-app-theme='daylight'] input[type='checkbox'],
+  [data-app-theme='daylight'] input[type='radio'] {
+    accent-color: rgb(var(--c-accent));
+  }
+}
+
+@layer components {
+  .title-bar {
+    @apply flex h-11 shrink-0 select-none items-stretch border-b border-surface-border/50 bg-surface-raised;
+  }
+
+  .title-bar-drag {
+    -webkit-app-region: drag;
+  }
+
+  .title-bar-control {
+    @apply flex w-11 items-center justify-center text-accent-muted transition-colors;
+    -webkit-app-region: no-drag;
+  }
+
+  .title-bar-control:hover {
+    @apply bg-surface-overlay text-terminal-fg;
+  }
+
+  .title-bar-control-close:hover {
+    @apply bg-red-500 text-white;
+  }
+
+  .app-shell {
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgb(var(--c-accent) / 0.06), transparent),
+      linear-gradient(180deg, rgb(var(--c-surface-raised)) 0%, rgb(var(--c-surface-muted)) 100%);
+  }
+
+  .workspace {
+    @apply gap-2 p-2;
+  }
+
+  .panel-card {
+    @apply overflow-hidden rounded-[10px] border border-surface-border/70 bg-surface-raised;
+    box-shadow: var(--app-panel-shadow);
+  }
+
+  .main-panel {
+    @apply panel-card flex min-w-0 flex-1 flex-col bg-surface-muted/80;
+  }
+
+  .panel {
+    @apply bg-surface-raised;
+  }
+
+  .btn-icon {
+    @apply flex h-8 w-8 items-center justify-center rounded-lg text-accent-muted transition-all duration-150 hover:bg-surface-overlay hover:text-terminal-fg active:scale-95;
+  }
+
+  .btn-icon-sm {
+    @apply flex h-7 w-7 items-center justify-center rounded-lg text-accent-muted transition-all duration-150 hover:bg-surface-overlay hover:text-terminal-fg;
+  }
+
+  .btn-primary {
+    @apply rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-secondary {
+    @apply rounded-lg border border-surface-border/70 bg-surface-overlay px-3 py-1.5 text-sm text-terminal-fg transition-colors hover:border-surface-border hover:bg-surface;
+  }
+
+  .modal-overlay {
+    background: rgb(var(--c-overlay) / var(--c-overlay-opacity));
+  }
+
+  .banner-warning {
+    @apply border-b border-surface-border bg-amber-500/10 px-3 py-2 text-[11px];
+    color: rgb(var(--c-warning));
+  }
+
+  .monitor-card {
+    @apply flex min-h-[240px] flex-col overflow-hidden rounded-xl border border-surface-border/80 bg-surface-overlay p-2.5;
+  }
+
+  .monitor-stat-pill {
+    @apply rounded-md border border-surface-border bg-surface/60 px-2 py-1.5;
+  }
+
+  .monitor-inset-box {
+    @apply rounded border border-surface-border bg-surface-muted/70 px-1.5 py-0.5 font-mono text-[10px] text-terminal-fg;
+  }
+
+  .monitor-icon-btn {
+    @apply flex h-6 w-6 items-center justify-center rounded text-accent-muted transition-colors hover:bg-surface-overlay hover:text-terminal-fg;
+  }
+
+  .tree-item {
+    @apply flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-accent-muted transition-colors duration-150 hover:bg-surface-overlay/80 hover:text-terminal-fg;
+  }
+
+  .tree-item-active {
+    @apply bg-accent/15 text-accent;
+    box-shadow: inset 0 0 0 1px rgb(var(--c-accent) / 0.18);
+  }
+
+  .section-label {
+    @apply px-2.5 py-1.5 text-[11px] font-medium tracking-wide text-accent-muted/90;
+  }
+
+  .search-box {
+    @apply flex items-center gap-2 rounded-lg border border-surface-border/60 bg-surface/80 px-2.5 py-1.5 transition-colors focus-within:border-accent/40 focus-within:bg-surface;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-surface-border/70 bg-surface px-3 py-2 text-sm text-terminal-fg outline-none transition-colors placeholder:text-accent-muted focus:border-accent/50 focus:ring-1 focus:ring-accent/20;
+  }
+
+  .tab-strip {
+    @apply flex h-11 shrink-0 items-end gap-1 border-b border-surface-border/50 bg-surface-raised/50 px-2.5 pb-0.5 pt-1;
+  }
+
+  .tab-item {
+    @apply relative flex h-9 min-w-[88px] max-w-[260px] cursor-grab select-none items-center gap-2 rounded-lg px-3.5 text-[13px] text-accent-muted transition-all duration-150 hover:bg-surface-overlay/50 hover:text-terminal-fg active:cursor-grabbing;
+  }
+
+  .tab-item-active {
+    @apply bg-surface-muted text-terminal-fg;
+    box-shadow: inset 0 1px 0 rgb(var(--c-accent) / 0.55);
+  }
+
+  .tab-item-dragging {
+    @apply opacity-45;
+  }
+
+  .tab-item-drop-target {
+    @apply ring-1 ring-accent/40;
+  }
+
+  .terminal-sub-tab-strip {
+    @apply flex shrink-0 items-center gap-1.5 border-b border-surface-border/40 bg-surface-raised/30 px-3 py-2;
+  }
+
+  .terminal-sub-tab {
+    @apply relative flex h-8 min-w-[72px] items-center justify-center rounded-md border border-transparent text-[13px] text-accent-muted transition-colors hover:bg-surface-overlay/50 hover:text-terminal-fg;
+  }
+
+  .terminal-sub-tab-active {
+    @apply border-accent/50 bg-surface-muted/60 text-accent;
+  }
+
+  .terminal-sub-tab-label {
+    @apply w-full px-6 py-1 text-center;
+  }
+
+  .terminal-sub-tab-close {
+    @apply absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 opacity-0 transition-opacity hover:bg-surface-border/60;
+  }
+
+  .terminal-sub-tab:hover .terminal-sub-tab-close {
+    @apply opacity-100;
+  }
+
+  .terminal-sub-tab-add {
+    @apply ml-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-accent-muted transition-colors hover:bg-surface-overlay/60 hover:text-terminal-fg;
+  }
+
+  .server-info-tag {
+    @apply shrink-0 rounded border border-surface-border/70 bg-surface-overlay/70 px-2 py-0.5 text-[11px] text-terminal-fg/90;
+  }
+
+  .status-bar {
+    @apply relative z-10 flex h-7 shrink-0 items-center justify-between border-t border-surface-border/40 bg-surface/90 px-3 text-[11px] backdrop-blur-sm;
+  }
+
+  .status-pill {
+    @apply flex items-center gap-1 rounded-full px-2 py-0.5 text-accent-muted transition-colors hover:bg-surface-overlay hover:text-terminal-fg;
+  }
+
+  .status-pill-active {
+    @apply bg-accent/15 text-accent;
+  }
+
+  .dropdown-menu {
+    @apply absolute z-50 mt-1 overflow-hidden rounded-lg border border-surface-border/80 bg-surface-raised py-1 backdrop-blur-md;
+    box-shadow: var(--app-float-shadow);
+  }
+
+  .dropdown-item {
+    @apply w-full px-3 py-1.5 text-left text-xs text-terminal-fg transition-colors hover:bg-surface-overlay;
+  }
+
+  .welcome-glow {
+    background:
+      radial-gradient(circle at 15% 40%, rgb(var(--c-accent) / 0.1) 0%, transparent 45%),
+      radial-gradient(circle at 85% 70%, rgb(var(--c-accent) / 0.08) 0%, transparent 45%),
+      radial-gradient(circle at 50% 10%, rgb(var(--c-accent) / 0.05) 0%, transparent 40%);
+  }
+
+  .welcome-card {
+    @apply flex flex-col items-center rounded-[10px] border border-surface-border/60 bg-surface-raised/50 px-4 py-5 backdrop-blur-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/30 hover:bg-surface-overlay/60;
+    box-shadow: var(--app-panel-shadow);
+  }
+
+  .panel-tab {
+    @apply relative flex items-center gap-1.5 px-3 py-1.5 text-xs text-accent-muted transition-colors hover:text-terminal-fg;
+  }
+
+  .panel-tab-active {
+    @apply text-terminal-fg after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-accent;
+  }
+
+  .protocol-tab {
+    @apply relative px-3 py-2 text-xs font-medium text-accent-muted transition-colors hover:text-terminal-fg;
+  }
+
+  .protocol-tab-active {
+    @apply text-terminal-fg after:absolute after:bottom-0 after:left-2 after:right-2 after:h-0.5 after:rounded-full after:bg-emerald-400;
+  }
+
+  .connection-card {
+    @apply rounded-lg border border-surface-border/60 bg-surface-raised/40 transition-all hover:border-accent/30 hover:bg-surface-overlay/50;
+  }
+
+  .settings-row {
+    @apply relative flex items-start justify-between rounded-lg border border-surface-border/70 bg-surface-overlay/30 px-4 py-3.5;
+  }
+
+  .settings-toggle {
+    @apply relative h-6 w-11 shrink-0 rounded-full bg-surface-border transition-colors;
+  }
+
+  .settings-toggle-on {
+    @apply bg-emerald-500;
+  }
+
+  .settings-toggle-thumb {
+    @apply absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform;
+  }
+
+  .settings-toggle-on .settings-toggle-thumb {
+    transform: translateX(1.25rem);
+  }
+
+  .settings-select-root {
+    @apply relative w-fit;
+  }
+
+  .settings-select-root-open {
+    @apply z-10;
+  }
+
+  .settings-select-trigger {
+    @apply flex w-[7.5rem] items-center justify-between gap-2 rounded-lg border border-surface-border/70 bg-surface-raised px-3 py-2 text-sm text-terminal-fg transition-colors hover:border-surface-border;
+  }
+
+  .settings-select-root-open .settings-select-trigger {
+    @apply border-accent/50 ring-1 ring-accent/20;
+  }
+
+  .settings-select-menu-floating {
+    @apply overflow-hidden rounded-lg border border-surface-border/80 bg-surface-raised py-1;
+    box-shadow: var(--app-float-shadow);
+  }
+
+  .settings-select-item {
+    @apply w-full px-3 py-2 text-left text-sm text-terminal-fg transition-colors hover:bg-surface-overlay;
+  }
+
+  .settings-select-item-active {
+    @apply bg-accent/15 text-accent;
+  }
+
+  .settings-action-btn {
+    @apply rounded-lg border border-surface-border/70 bg-surface-raised px-4 py-2 text-sm text-terminal-fg transition-colors hover:bg-surface-overlay;
+  }
+
+  .lock-screen-overlay {
+    @apply fixed inset-0 z-[100] flex items-center justify-center;
+    background: rgb(var(--c-overlay) / 0.72);
+    backdrop-filter: blur(8px);
+  }
+
+  .lock-screen-card {
+    @apply w-full max-w-sm rounded-app border border-surface-border/70 bg-surface-raised p-6 shadow-float;
+    box-shadow: var(--app-float-shadow);
+  }
+}

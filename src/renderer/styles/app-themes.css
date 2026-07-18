@@ -1,0 +1,96 @@
+:root,
+[data-app-theme='tokyo-night'] {
+  --c-surface: 18 19 26;
+  --c-surface-raised: 26 28 38;
+  --c-surface-overlay: 34 37 51;
+  --c-surface-border: 42 46 63;
+  --c-surface-muted: 14 15 20;
+  --c-accent: 108 158 255;
+  --c-accent-muted: 92 100 120;
+  --c-accent-hover: 138 180 255;
+  --c-terminal-bg: 12 13 18;
+  --c-terminal-fg: 228 233 245;
+  --c-warning: 252 211 77;
+  --c-overlay: 0 0 0;
+  --c-overlay-opacity: 0.55;
+  --app-panel-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px rgb(0 0 0 / 0.28);
+  --app-float-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+}
+
+[data-app-theme='emerald'] {
+  --c-surface: 15 23 20;
+  --c-surface-raised: 21 32 28;
+  --c-surface-overlay: 30 44 38;
+  --c-surface-border: 38 56 48;
+  --c-surface-muted: 10 16 14;
+  --c-accent: 52 211 153;
+  --c-accent-muted: 94 118 108;
+  --c-accent-hover: 110 231 183;
+  --c-terminal-bg: 10 16 14;
+  --c-terminal-fg: 209 250 229;
+  --c-warning: 252 211 77;
+  --c-overlay: 0 0 0;
+  --c-overlay-opacity: 0.55;
+  --app-panel-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px rgb(0 0 0 / 0.28);
+  --app-float-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+}
+
+[data-app-theme='lavender'] {
+  --c-surface: 19 19 31;
+  --c-surface-raised: 26 27 40;
+  --c-surface-overlay: 36 37 54;
+  --c-surface-border: 47 48 69;
+  --c-surface-muted: 14 14 24;
+  --c-accent: 167 139 250;
+  --c-accent-muted: 107 100 128;
+  --c-accent-hover: 196 181 253;
+  --c-terminal-bg: 12 12 20;
+  --c-terminal-fg: 237 233 254;
+  --c-warning: 252 211 77;
+  --c-overlay: 0 0 0;
+  --c-overlay-opacity: 0.55;
+  --app-panel-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px rgb(0 0 0 / 0.28);
+  --app-float-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+}
+
+[data-app-theme='sunset'] {
+  --c-surface: 23 17 15;
+  --c-surface-raised: 33 24 20;
+  --c-surface-overlay: 42 32 28;
+  --c-surface-border: 58 45 38;
+  --c-surface-muted: 17 12 10;
+  --c-accent: 251 146 60;
+  --c-accent-muted: 120 98 86;
+  --c-accent-hover: 253 186 116;
+  --c-terminal-bg: 16 11 9;
+  --c-terminal-fg: 254 243 235;
+  --c-warning: 252 211 77;
+  --c-overlay: 0 0 0;
+  --c-overlay-opacity: 0.55;
+  --app-panel-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px rgb(0 0 0 / 0.28);
+  --app-float-shadow: 0 12px 40px rgb(0 0 0 / 0.45);
+}
+
+[data-app-theme='daylight'] {
+  --c-surface: 244 246 250;
+  --c-surface-raised: 255 255 255;
+  --c-surface-overlay: 238 242 248;
+  --c-surface-border: 203 213 225;
+  --c-surface-muted: 226 232 240;
+  --c-accent: 37 99 235;
+  --c-accent-muted: 100 116 139;
+  --c-accent-hover: 59 130 246;
+  --c-terminal-bg: 248 250 252;
+  --c-terminal-fg: 15 23 42;
+  --c-warning: 180 83 9;
+  --c-overlay: 15 23 42;
+  --c-overlay-opacity: 0.35;
+  --app-panel-shadow: 0 1px 0 rgb(255 255 255 / 0.9) inset, 0 1px 3px rgb(15 23 42 / 0.06),
+    0 8px 24px rgb(15 23 42 / 0.08);
+  --app-float-shadow: 0 12px 32px rgb(15 23 42 / 0.12);
+}
+
+[data-app-theme='daylight'] select option {
+  background: rgb(var(--c-surface-raised));
+  color: rgb(var(--c-terminal-fg));
+}

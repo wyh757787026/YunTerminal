@@ -1,0 +1,51 @@
+appId: com.yunterminal.app
+productName: YunTerminal
+copyright: Copyright © 2026 YunTerminal
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+compression: maximum
+
+# node-pty 1.x 自带 N-API prebuilds；跳过 rebuild，避免 Windows 上缺少 VS Build Tools 时失败
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: YunTerminal-${version}-win-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: YunTerminal
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.developer-tools
+  artifactName: YunTerminal-${version}-mac.${ext}
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+dmg:
+  title: YunTerminal ${version}
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+  artifactName: YunTerminal-${version}-linux-${arch}.${ext}
+  maintainer: YunTerminal
+
+publish: null
