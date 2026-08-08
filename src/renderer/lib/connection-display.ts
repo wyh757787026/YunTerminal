@@ -8,8 +8,9 @@ export function getLatencyDisplay(entry: {
 }): { text: string; className: string; title?: string } {
   switch (entry.status) {
     case 'idle':
+      return { text: '--', className: 'text-accent-muted/50', title: '等待检测' }
     case 'pending':
-      return { text: '…', className: 'text-accent-muted/70' }
+      return { text: '…', className: 'text-accent-muted/70', title: '检测中' }
     case 'skip':
       return { text: '--', className: 'text-accent-muted/50', title: entry.message }
     case 'fail':
@@ -75,6 +76,7 @@ export function getServerInfoDisplay(entry: ServerInfoEntry): {
 } {
   switch (entry.status) {
     case 'idle':
+      return { tags: [], title: '等待获取服务器信息', loading: false }
     case 'pending':
       return { tags: [], loading: true }
     case 'skip':

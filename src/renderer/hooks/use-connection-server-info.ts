@@ -26,7 +26,8 @@ export function useConnectionServerInfo(
     () =>
       connections.map((c) => ({
         id: c.id,
-        skip: c.protocol === 'rdp' || c.protocol === 'vnc'
+        // 服务器信息依赖 SSH exec，仅 SSH 可用
+        skip: c.protocol !== undefined && c.protocol !== 'ssh'
       })),
     [connections]
   )
@@ -40,7 +41,7 @@ export function useConnectionServerInfo(
     if (skip) {
       setServerInfoMap((prev) => ({
         ...prev,
-        [id]: { status: 'skip', message: 'RDP 暂不支持服务器信息' }
+        [id]: { status: 'skip', message: '当前协议暂不支持服务器信息' }
       }))
       cacheRef.current.set(id, Date.now())
       return

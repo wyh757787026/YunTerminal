@@ -228,6 +228,7 @@ export function ConnectionListPanel(): React.JSX.Element {
     connections,
     favorites,
     recent,
+    sessions,
     protocolTab,
     connectionSection,
     searchQuery,
@@ -257,10 +258,23 @@ export function ConnectionListPanel(): React.JSX.Element {
     return list
   }, [connections, favorites, recent, protocolTab, connectionSection, searchQuery, sortKey, sortDir])
 
-  // 不自动探测延迟（并发 TCP 可能干扰正式连接）；仅手动刷新
-  const { latencyMap, refreshLatency } = useConnectionLatency(filtered, false)
-  // 不自动拉取服务器信息（会后台建 SSH，与正式连接并发导致握手失败）；仅手动刷新时获取
-  const { serverInfoMap, refreshServerInfo } = useConnectionServerInfo(filtered, false)
+  // 正在握手的连接先跳过服务器信息拉取，避免与正式连接抢 SSH
+  const connectingIds = useMemo(
+    () =>
+      new Set(
+        sessions
+          .filter((s) => s.status === 'connecting' && Boolean(s.connectionId))
+          .map((s) => s.connectionId as string)
+      ),
+    [sessions]
+  )
+  const serverInfoTargets = useMemo(
+    () => filtered.filter((c) => !connectingIds.has(c.id)),
+    [filtered, connectingIds]
+  )
+
+  const { latencyMap, refreshLatency } = useConnectionLatency(filtered, true)
+  const { serverInfoMap, refreshServerInfo } = useConnectionServerInfo(serverInfoTargets, true)
 
   const handleRefresh = (): void => {
     void refreshConnectionData()

@@ -41,10 +41,10 @@ let recordingManager: RecordingManager | null = null
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
-    width: 1520,
-    height: 1040,
-    minWidth: 1100,
-    minHeight: 760,
+    width: 1280,
+    height: 820,
+    minWidth: 960,
+    minHeight: 640,
     show: false,
     autoHideMenuBar: true,
     frame: false,
