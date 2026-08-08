@@ -79,7 +79,10 @@ interface AppState {
   createConnection: (input: ConnectionInput) => Promise<StoredConnection>
   updateConnection: (id: string, input: ConnectionInput) => Promise<StoredConnection | null>
   deleteConnection: (id: string) => Promise<void>
+  deleteConnections: (ids: string[]) => Promise<void>
   toggleFavorite: (id: string) => Promise<void>
+  /** 将指定连接全部设为收藏（已收藏的跳过） */
+  favoriteConnections: (ids: string[]) => Promise<void>
   moveConnection: (id: string, groupId: string) => Promise<void>
   createGroup: (input: GroupInput) => Promise<Group>
   updateGroup: (id: string, input: GroupInput) => Promise<Group | null>
@@ -341,8 +344,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().refreshConnectionData()
   },
 
+  deleteConnections: async (ids) => {
+    const unique = [...new Set(ids)].filter(Boolean)
+    if (unique.length === 0) return
+    for (const id of unique) {
+      await window.api.connection.delete(id)
+    }
+    await get().refreshConnectionData()
+  },
+
   toggleFavorite: async (id) => {
     await window.api.connection.toggleFavorite(id)
+    await get().refreshConnectionData()
+  },
+
+  favoriteConnections: async (ids) => {
+    const unique = [...new Set(ids)].filter(Boolean)
+    if (unique.length === 0) return
+    const connections = get().connections
+    for (const id of unique) {
+      const conn = connections.find((c) => c.id === id)
+      if (conn && !conn.favorite) {
+        await window.api.connection.toggleFavorite(id)
+      }
+    }
     await get().refreshConnectionData()
   },
 

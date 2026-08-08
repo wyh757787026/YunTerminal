@@ -12,7 +12,8 @@ import {
   Scan,
   Search,
   Server,
-  Star
+  Star,
+  Trash2
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@renderer/stores/app-store'
@@ -234,13 +235,16 @@ export function ConnectionListPanel(): React.JSX.Element {
     searchQuery,
     setSearchQuery,
     openConnectionDialog,
-    refreshConnectionData
+    refreshConnectionData,
+    favoriteConnections,
+    deleteConnections
   } = useAppStore()
 
   const [showHosts, setShowHosts] = useState(true)
   const [sortKey, setSortKey] = useState<SortKey>('name')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   const protocolLabel = getProtocolLabel(protocolTab)
 
@@ -323,6 +327,34 @@ export function ConnectionListPanel(): React.JSX.Element {
     }
   }
 
+  const selectedInView = useMemo(
+    () => filtered.filter((c) => selectedIds.has(c.id)),
+    [filtered, selectedIds]
+  )
+
+  const handleBulkFavorite = async (): Promise<void> => {
+    if (bulkBusy || selectedInView.length === 0) return
+    setBulkBusy(true)
+    try {
+      await favoriteConnections(selectedInView.map((c) => c.id))
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
+  const handleBulkDelete = async (): Promise<void> => {
+    if (bulkBusy || selectedInView.length === 0) return
+    const count = selectedInView.length
+    if (!confirm(`确定删除选中的 ${count} 个连接？此操作不可恢复。`)) return
+    setBulkBusy(true)
+    try {
+      await deleteConnections(selectedInView.map((c) => c.id))
+      setSelectedIds(new Set())
+    } finally {
+      setBulkBusy(false)
+    }
+  }
+
   if (protocolTab === 'tunnel') {
     return <TunnelGlobalPanel />
   }
@@ -358,6 +390,34 @@ export function ConnectionListPanel(): React.JSX.Element {
         >
           <Plus size={15} />
         </button>
+        <div className="ml-1 flex shrink-0 items-center gap-1 border-l border-surface-border/50 pl-2">
+          <button
+            type="button"
+            className="btn-icon-sm disabled:opacity-35"
+            title={
+              selectedInView.length > 0
+                ? `批量收藏选中的 ${selectedInView.length} 个连接`
+                : '请先勾选连接'
+            }
+            disabled={bulkBusy || selectedInView.length === 0}
+            onClick={() => void handleBulkFavorite()}
+          >
+            <Star size={13} className="fill-amber-400/90 text-amber-400/90" />
+          </button>
+          <button
+            type="button"
+            className="btn-icon-sm text-red-400 hover:text-red-400 disabled:opacity-35"
+            title={
+              selectedInView.length > 0
+                ? `批量删除选中的 ${selectedInView.length} 个连接`
+                : '请先勾选连接'
+            }
+            disabled={bulkBusy || selectedInView.length === 0}
+            onClick={() => void handleBulkDelete()}
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
