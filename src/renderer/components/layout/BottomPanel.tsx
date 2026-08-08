@@ -1,10 +1,9 @@
-import { Activity, Film, Network, StickyNote, X } from 'lucide-react'
+import { Activity, Network, StickyNote, X } from 'lucide-react'
 import { useAppStore, type BottomPanelTab } from '@renderer/stores/app-store'
 import { TunnelPanel } from '@renderer/components/tunnel/TunnelPanel'
 import { NotesPanel } from '@renderer/components/notes/NotesPanel'
 import { ErrorBoundary } from '@renderer/components/common/ErrorBoundary'
 import { MonitorPanel } from '@renderer/components/monitor/MonitorPanel'
-import { RecordingsPanel } from '@renderer/components/recording/RecordingsPanel'
 import { BOTTOM_PANEL_HEIGHT_CLASS } from './layout-constants'
 
 type PanelTab = BottomPanelTab
@@ -12,14 +11,15 @@ type PanelTab = BottomPanelTab
 const tabs: { id: PanelTab; label: string; icon: React.ReactNode }[] = [
   { id: 'tunnel', label: '端口转发', icon: <Network size={13} /> },
   { id: 'notes', label: '笔记', icon: <StickyNote size={13} /> },
-  { id: 'monitor', label: '监控', icon: <Activity size={13} /> },
-  { id: 'recordings', label: '录制', icon: <Film size={13} /> }
+  { id: 'monitor', label: '监控', icon: <Activity size={13} /> }
 ]
 
 export function BottomPanel(): React.JSX.Element | null {
   const { bottomPanelOpen, bottomPanelTab, toggleBottomPanel, setBottomPanelTab } = useAppStore()
 
   if (!bottomPanelOpen) return null
+
+  const activeTab = tabs.some((tab) => tab.id === bottomPanelTab) ? bottomPanelTab : 'tunnel'
 
   return (
     <div
@@ -30,7 +30,7 @@ export function BottomPanel(): React.JSX.Element | null {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              className={`panel-tab ${bottomPanelTab === tab.id ? 'panel-tab-active' : ''}`}
+              className={`panel-tab ${activeTab === tab.id ? 'panel-tab-active' : ''}`}
               onClick={() => setBottomPanelTab(tab.id)}
             >
               {tab.icon}
@@ -44,14 +44,13 @@ export function BottomPanel(): React.JSX.Element | null {
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden p-1">
-        {bottomPanelTab === 'tunnel' && <TunnelPanel />}
-        {bottomPanelTab === 'notes' && <NotesPanel />}
-        {bottomPanelTab === 'monitor' && (
+        {activeTab === 'tunnel' && <TunnelPanel />}
+        {activeTab === 'notes' && <NotesPanel />}
+        {activeTab === 'monitor' && (
           <ErrorBoundary>
             <MonitorPanel />
           </ErrorBoundary>
         )}
-        {bottomPanelTab === 'recordings' && <RecordingsPanel />}
       </div>
     </div>
   )

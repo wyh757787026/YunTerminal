@@ -9,8 +9,11 @@ directories:
 files:
   - out/**/*
   - package.json
+  - node_modules/ffmpeg-static/**/*
 
 asar: true
+asarUnpack:
+  - '**/node_modules/ffmpeg-static/**'
 compression: maximum
 
 # node-pty 1.x 自带 N-API prebuilds；跳过 rebuild，避免 Windows 上缺少 VS Build Tools 时失败

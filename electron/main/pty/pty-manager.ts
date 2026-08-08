@@ -2,8 +2,6 @@ import { spawn, type ChildProcess } from 'child_process'
 import { homedir } from 'os'
 import type { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../../src/shared/ipc'
-import type { RecordingManager } from '../recording/recording-manager'
-
 interface PtySession {
   process: ChildProcess
   backend: 'node-pty' | 'child-process'
@@ -32,10 +30,7 @@ export class PtyManager {
   private readonly streamEpoch = new Map<string, number>()
   private readonly nodePty = tryLoadNodePty()
 
-  constructor(
-    private getWindow: () => BrowserWindow | null,
-    private readonly recordingManager?: RecordingManager
-  ) {}
+  constructor(private getWindow: () => BrowserWindow | null) {}
 
   create(sessionId: string, cols: number, rows: number): void {
     this.destroy(sessionId)
@@ -51,8 +46,6 @@ export class PtyManager {
   write(sessionId: string, data: string): void {
     const session = this.sessions.get(sessionId)
     if (!session) return
-
-    this.recordingManager?.append(sessionId, 'in', data)
 
     if (session.backend === 'node-pty' && session.ptyProcess) {
       session.ptyProcess.write(data)
@@ -101,7 +94,6 @@ export class PtyManager {
   }
 
   private emitData(sessionId: string, data: string): void {
-    this.recordingManager?.append(sessionId, 'out', data)
     this.getWindow()?.webContents.send(IPC_CHANNELS.PTY_DATA, { sessionId, data })
   }
 

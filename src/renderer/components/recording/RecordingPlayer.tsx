@@ -1,111 +1,141 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Play, X } from 'lucide-react'
-import { Terminal } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import type { RecordingFile } from '@shared/types/recording'
-import '@xterm/xterm/css/xterm.css'
+import { useEffect, useRef, useState } from 'react'
+import { Pause, Play, X } from 'lucide-react'
+import type { RecordingFileUrl } from '@shared/types/recording'
+import { formatClockTime, formatDuration } from '@renderer/lib/format-utils'
 
 interface RecordingPlayerProps {
-  recording: RecordingFile
+  recording: RecordingFileUrl
   onClose: () => void
 }
 
 export function RecordingPlayer({ recording, onClose }: RecordingPlayerProps): React.JSX.Element {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const { meta, url } = recording
+  const videoRef = useRef<HTMLVideoElement>(null)
   const [playing, setPlaying] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const timersRef = useRef<number[]>([])
+  const [currentSec, setCurrentSec] = useState(0)
 
-  const stopPlayback = useCallback((): void => {
-    for (const timer of timersRef.current) {
-      window.clearTimeout(timer)
-    }
-    timersRef.current = []
-    setPlaying(false)
-  }, [])
+  const totalSec = Math.max(0, Math.floor((meta.durationMs ?? 0) / 1000))
+  const durationLabel = totalSec > 0 ? formatDuration(totalSec) : '—'
 
   useEffect(() => {
-    return () => stopPlayback()
-  }, [stopPlayback])
+    const video = videoRef.current
+    if (!video) return
 
-  const startPlayback = (): void => {
-    if (!containerRef.current || playing) return
-    stopPlayback()
-    containerRef.current.innerHTML = ''
-
-    const terminal = new Terminal({
-      cols: recording.meta.cols,
-      rows: recording.meta.rows,
-      fontSize: 13,
-      fontFamily: 'JetBrains Mono, Consolas, monospace',
-      disableStdin: true,
-      cursorBlink: false
-    })
-    const fitAddon = new FitAddon()
-    terminal.loadAddon(fitAddon)
-    terminal.open(containerRef.current)
-    fitAddon.fit()
-    terminal.reset()
-
-    setPlaying(true)
-    const durationMs = recording.meta.durationMs ?? recording.events.at(-1)?.offsetMs ?? 0
-
-    for (const event of recording.events) {
-      const timer = window.setTimeout(() => {
-        if (event.dir === 'out' || event.dir === 'in') {
-          terminal.write(event.data)
-        }
-        setProgress(durationMs > 0 ? (event.offsetMs / durationMs) * 100 : 0)
-      }, event.offsetMs)
-      timersRef.current.push(timer)
+    const onTimeUpdate = (): void => {
+      setCurrentSec(video.currentTime)
+    }
+    const onPlay = (): void => setPlaying(true)
+    const onPause = (): void => setPlaying(false)
+    const onEnded = (): void => {
+      setPlaying(false)
+      if (totalSec > 0) setCurrentSec(totalSec)
     }
 
-    const endTimer = window.setTimeout(() => {
-      setPlaying(false)
-      setProgress(100)
-    }, durationMs + 100)
-    timersRef.current.push(endTimer)
+    video.addEventListener('timeupdate', onTimeUpdate)
+    video.addEventListener('play', onPlay)
+    video.addEventListener('pause', onPause)
+    video.addEventListener('ended', onEnded)
+
+    video.load()
+    void video.play().catch(() => {
+      // 自动播放可能被拦截
+    })
+
+    return () => {
+      video.removeEventListener('timeupdate', onTimeUpdate)
+      video.removeEventListener('play', onPlay)
+      video.removeEventListener('pause', onPause)
+      video.removeEventListener('ended', onEnded)
+      video.pause()
+      video.removeAttribute('src')
+      video.load()
+    }
+  }, [url, totalSec])
+
+  const togglePlay = (): void => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) void video.play().catch(() => undefined)
+    else video.pause()
   }
 
+  const seekTo = (sec: number): void => {
+    const video = videoRef.current
+    if (!video) return
+    const next = Math.min(Math.max(0, sec), totalSec > 0 ? totalSec : sec)
+    video.currentTime = next
+    setCurrentSec(next)
+  }
+
+  const progressMax = totalSec > 0 ? totalSec : Math.max(currentSec, 1)
+  const progressValue = Math.min(currentSec, progressMax)
+
   return (
-    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center">
+    <div className="modal-overlay fixed inset-0 z-[70] flex items-center justify-center">
       <div className="panel flex h-[80vh] w-full max-w-4xl flex-col border shadow-2xl">
         <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
           <div>
-            <h2 className="text-sm font-medium">{recording.meta.title}</h2>
+            <h2 className="text-sm font-medium">{meta.title}</h2>
             <p className="text-[11px] text-accent-muted">
-              {new Date(recording.meta.startedAt).toLocaleString()} ·{' '}
-              {recording.meta.sessionType.toUpperCase()} · {recording.events.length} 事件
+              {new Date(meta.startedAt).toLocaleString()} · {durationLabel} · 窗口录制
             </p>
           </div>
-          <button className="btn-icon h-7 w-7" onClick={onClose}>
+          <button type="button" className="btn-icon h-7 w-7" onClick={onClose}>
             <X size={14} />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 bg-terminal-bg p-2">
-          <div ref={containerRef} className="h-full w-full" />
-        </div>
-
-        <div className="border-t border-surface-border px-4 py-3">
-          <div className="mb-2 h-1.5 rounded-full bg-surface-border">
-            <div
-              className="h-full rounded-full bg-accent transition-all"
-              style={{ width: `${progress}%` }}
+        <div className="flex min-h-0 flex-1 flex-col bg-black">
+          <div
+            className="flex min-h-0 flex-1 cursor-pointer items-center justify-center"
+            onClick={togglePlay}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault()
+                togglePlay()
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={playing ? '暂停' : '播放'}
+          >
+            <video
+              key={url}
+              ref={videoRef}
+              className="max-h-full max-w-full"
+              src={url}
+              playsInline
+              preload="auto"
             />
           </div>
-          <div className="flex justify-end gap-2">
-            <button className="btn-secondary px-3 py-1.5 text-xs" onClick={stopPlayback}>
-              停止
-            </button>
+
+          <div className="flex shrink-0 items-center gap-3 border-t border-white/10 bg-black/90 px-3 py-2">
             <button
-              className="btn-primary flex items-center gap-1 px-3 py-1.5 text-xs"
-              onClick={startPlayback}
-              disabled={playing}
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded text-white hover:bg-white/10"
+              onClick={togglePlay}
+              title={playing ? '暂停' : '播放'}
             >
-              <Play size={12} />
-              {playing ? '播放中…' : '播放'}
+              {playing ? <Pause size={16} /> : <Play size={16} />}
             </button>
+
+            <span className="min-w-[3.5rem] font-mono text-[11px] tabular-nums text-white/90">
+              {formatClockTime(currentSec)}
+            </span>
+
+            <input
+              type="range"
+              className="h-1 flex-1 cursor-pointer accent-accent"
+              min={0}
+              max={progressMax}
+              step={0.1}
+              value={progressValue}
+              onChange={(e) => seekTo(Number(e.target.value))}
+            />
+
+            <span className="min-w-[3.5rem] text-right font-mono text-[11px] tabular-nums text-white/90">
+              {formatClockTime(totalSec)}
+            </span>
           </div>
         </div>
       </div>

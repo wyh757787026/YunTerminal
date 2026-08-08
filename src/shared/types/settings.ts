@@ -19,6 +19,8 @@ export interface TerminalSettings {
   noteEditorFontSize: number
   lockIdleTimeoutMin: LockIdleTimeoutMin
   lockOnStartup: boolean
+  /** 录屏保存目录；空字符串表示使用应用默认目录 */
+  recordingSaveDir: string
 }
 
 export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
@@ -33,7 +35,8 @@ export const DEFAULT_TERMINAL_SETTINGS: TerminalSettings = {
   noteMode: 'split',
   noteEditorFontSize: 18,
   lockIdleTimeoutMin: 0,
-  lockOnStartup: false
+  lockOnStartup: false,
+  recordingSaveDir: ''
 }
 
 export const LOCK_IDLE_TIMEOUT_OPTIONS: { value: LockIdleTimeoutMin; label: string }[] = [

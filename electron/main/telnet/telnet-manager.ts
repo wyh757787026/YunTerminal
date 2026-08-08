@@ -4,7 +4,6 @@ import type { Stream } from 'telnet-client/lib/utils'
 import { IPC_CHANNELS, type TelnetStatusEvent } from '../../../src/shared/ipc'
 import type { ConnectionStore } from '../store/connection-store'
 import type { CredentialStore } from '../store/credential-store'
-import type { RecordingManager } from '../recording/recording-manager'
 import type { SshAuthBridge } from '../ssh/ssh-auth-bridge'
 import { buildTelnetConnectOptions, resolveTelnetCredentials } from './telnet-connect'
 
@@ -21,7 +20,6 @@ export class TelnetManager {
   constructor(
     private readonly store: ConnectionStore,
     private getWindow: () => BrowserWindow | null,
-    private readonly recordingManager?: RecordingManager,
     private readonly authBridge?: SshAuthBridge,
     private readonly credentialStore?: CredentialStore
   ) {}
@@ -100,7 +98,6 @@ export class TelnetManager {
   }
 
   write(sessionId: string, data: string): void {
-    this.recordingManager?.append(sessionId, 'in', data)
     this.sessions.get(sessionId)?.shell?.write(data)
   }
 
@@ -143,7 +140,6 @@ export class TelnetManager {
   }
 
   private emitData(sessionId: string, data: string): void {
-    this.recordingManager?.append(sessionId, 'out', data)
     this.getWindow()?.webContents.send(IPC_CHANNELS.TELNET_DATA, { sessionId, data })
   }
 

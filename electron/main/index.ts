@@ -1,6 +1,20 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, protocol, net, session } from 'electron'
 import { join } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'ytrec',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      bypassCSP: true
+    }
+  }
+])
 import { IPC_CHANNELS } from '../../src/shared/ipc'
 import { registerIpcHandlers } from './ipc/register-handlers'
 import { LocalFs } from './fs/local-fs'
@@ -84,8 +98,10 @@ app.whenReady().then(() => {
 
   connectionStore = new ConnectionStore(app.getPath('userData'))
   credentialStore = new CredentialStore(app.getPath('userData'))
-  recordingManager = new RecordingManager(app.getPath('userData'))
   const settingsStore = new SettingsStore(app.getPath('userData'))
+  recordingManager = new RecordingManager(app.getPath('userData'), () =>
+    settingsStore.get().recordingSaveDir
+  )
   const lockScreenStore = new LockScreenStore(app.getPath('userData'))
   sshAuthBridge = new SshAuthBridge(() => mainWindow)
   sshAuthBridge.register()
@@ -93,7 +109,6 @@ app.whenReady().then(() => {
   sshManager = new SshManager(
     connectionStore,
     () => mainWindow,
-    recordingManager,
     sshAuthBridge,
     credentialStore,
     (connectionId) => {
@@ -111,13 +126,34 @@ app.whenReady().then(() => {
   telnetManager = new TelnetManager(
     connectionStore,
     () => mainWindow,
-    recordingManager,
     sshAuthBridge,
     credentialStore
   )
   vncProxyService = new VncProxyService()
   vncManager = new VncManager(connectionStore, vncProxyService, () => mainWindow)
-  ptyManager = new PtyManager(() => mainWindow, recordingManager)
+  ptyManager = new PtyManager(() => mainWindow)
+
+  protocol.handle('ytrec', (request) => {
+    try {
+      // hostname 为录制 id；query（如 ?t=）仅用于绕过媒体缓存，需忽略
+      const id = new URL(request.url).hostname
+      const filePath = recordingManager?.getFilePath(id)
+      if (!filePath) return new Response('Not Found', { status: 404 })
+      return net.fetch(pathToFileURL(filePath).href, {
+        bypassCustomProtocolHandlers: true
+      })
+    } catch {
+      return new Response('Bad Request', { status: 400 })
+    }
+  })
+
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    if (permission === 'media' || permission === 'display-capture') {
+      callback(true)
+      return
+    }
+    callback(false)
+  })
   sftpManager = new SftpManager(connectionStore, () => mainWindow)
   ftpManager = new FtpManager(connectionStore, () => mainWindow)
   const quickCommandStore = new QuickCommandStore(app.getPath('userData'))
@@ -186,7 +222,6 @@ app.on('window-all-closed', () => {
   ftpManager?.disconnectAll()
   tunnelManager?.stopAll()
   ptyManager?.destroyAll()
-  recordingManager?.stopAll()
   if (process.platform !== 'darwin') {
     app.quit()
   }

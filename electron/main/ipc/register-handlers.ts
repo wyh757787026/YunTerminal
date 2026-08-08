@@ -1,5 +1,6 @@
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
-import { writeFileSync, readFileSync } from 'fs'
+import { desktopCapturer, dialog, ipcMain, type BrowserWindow } from 'electron'
+import { mkdirSync, writeFileSync, readFileSync } from 'fs'
+import { isAbsolute } from 'path'
 import type { Duplex } from 'stream'
 import {
   IPC_CHANNELS,
@@ -50,7 +51,7 @@ import type { TunnelInput } from '../../../src/shared/types/tunnel'
 import type { QuickCommandInput } from '../../../src/shared/types/quick-command'
 import type { NoteInput } from '../../../src/shared/types/note'
 import type { AiChatParams, AiSettingsInput } from '../../../src/shared/types/ai'
-import type { RecordingStartParams } from '../../../src/shared/types/recording'
+import type { RecordingSaveParams } from '../../../src/shared/types/recording'
 import { launchRdp } from '../rdp/rdp-launcher'
 import type { RecordingManager } from '../recording/recording-manager'
 import { AiService } from '../ai/ai-service'
@@ -214,9 +215,25 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle(IPC_CHANNELS.SETTINGS_GET, () => settingsStore.get())
-  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, (_, partial: Partial<TerminalSettings>) =>
-    settingsStore.update(partial)
-  )
+  ipcMain.handle(IPC_CHANNELS.SETTINGS_UPDATE, (_, partial: Partial<TerminalSettings>) => {
+    if (partial.recordingSaveDir !== undefined) {
+      const trimmed = partial.recordingSaveDir.trim()
+      partial = { ...partial, recordingSaveDir: trimmed }
+      if (trimmed) {
+        if (!isAbsolute(trimmed)) {
+          throw new Error('录屏保存目录必须是绝对路径')
+        }
+        try {
+          mkdirSync(trimmed, { recursive: true })
+        } catch (err) {
+          throw new Error(
+            err instanceof Error ? `无法创建录屏目录: ${err.message}` : '无法创建录屏目录'
+          )
+        }
+      }
+    }
+    return settingsStore.update(partial)
+  })
 
   ipcMain.handle(IPC_CHANNELS.LOCK_SCREEN_STATUS, () => ({
     passwordConfigured: lockScreenStore.isConfigured()
@@ -536,23 +553,62 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.AI_CHAT, (_, params: AiChatParams) => aiService.chat(params))
 
-  ipcMain.handle(IPC_CHANNELS.RECORD_START, (_, params: RecordingStartParams) =>
-    recordingManager.start(params)
-  )
+  ipcMain.handle(IPC_CHANNELS.RECORD_GET_SOURCE, async () => {
+    const win = getWindow()
+    if (!win) return null
 
-  ipcMain.handle(IPC_CHANNELS.RECORD_STOP, (_, sessionId: string) =>
-    recordingManager.stop(sessionId)
-  )
+    const sources = await desktopCapturer.getSources({
+      types: ['window'],
+      thumbnailSize: { width: 0, height: 0 },
+      fetchWindowIcons: false
+    })
 
-  ipcMain.handle(IPC_CHANNELS.RECORD_STATUS, (_, sessionId: string) =>
-    recordingManager.isRecording(sessionId)
+    const mediaSourceId = win.getMediaSourceId()
+    const byId = sources.find((source) => source.id === mediaSourceId)
+    if (byId) return { id: byId.id, name: byId.name }
+
+    const title = win.getTitle()
+    const byTitle =
+      sources.find((source) => source.name === title) ??
+      sources.find((source) => source.name.includes('YunTerminal'))
+    if (byTitle) return { id: byTitle.id, name: byTitle.name }
+
+    const first = sources[0]
+    return first ? { id: first.id, name: first.name } : null
+  })
+
+  ipcMain.handle(IPC_CHANNELS.RECORD_SAVE, (_, params: RecordingSaveParams) =>
+    recordingManager.save(params)
   )
 
   ipcMain.handle(IPC_CHANNELS.RECORD_LIST, () => recordingManager.list())
 
-  ipcMain.handle(IPC_CHANNELS.RECORD_READ, (_, id: string) => recordingManager.read(id))
+  ipcMain.handle(IPC_CHANNELS.RECORD_GET_URL, (_, id: string) => recordingManager.getFileUrl(id))
 
   ipcMain.handle(IPC_CHANNELS.RECORD_DELETE, (_, id: string) => recordingManager.delete(id))
+
+  ipcMain.handle(IPC_CHANNELS.RECORD_OPEN_DIR, () => recordingManager.openDir())
+
+  ipcMain.handle(IPC_CHANNELS.RECORD_GET_DIR, () => recordingManager.getDirInfo())
+
+  ipcMain.handle(IPC_CHANNELS.RECORD_PICK_DIR, async () => {
+    const win = getWindow()
+    const current = recordingManager.getDirInfo().currentDir
+    const result = win
+      ? await dialog.showOpenDialog(win, {
+          title: '选择录屏保存目录',
+          defaultPath: current,
+          properties: ['openDirectory', 'createDirectory']
+        })
+      : await dialog.showOpenDialog({
+          title: '选择录屏保存目录',
+          defaultPath: current,
+          properties: ['openDirectory', 'createDirectory']
+        })
+
+    if (result.canceled || !result.filePaths[0]) return null
+    return result.filePaths[0]
+  })
 
   ipcMain.handle(IPC_CHANNELS.RDP_LAUNCH, (_, connectionId: string) =>
     launchRdp(store, connectionId)

@@ -37,12 +37,28 @@ export function formatSpeed(bytesPerSec: number): string {
 }
 
 export function formatDuration(seconds: number): string {
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  if (days > 0) return `${days}天 ${hours}小时`
-  if (hours > 0) return `${hours}小时 ${minutes}分钟`
-  return `${minutes}分钟`
+  const total = Math.max(0, Math.floor(seconds))
+  const days = Math.floor(total / 86400)
+  const hours = Math.floor((total % 86400) / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+
+  if (days > 0) return `${days}天 ${hours}小时 ${minutes}分`
+  if (hours > 0) return `${hours}小时 ${minutes}分 ${secs}秒`
+  if (minutes > 0) return `${minutes}分 ${secs}秒`
+  return `${secs}秒`
+}
+
+/** 播放器时钟：0:05 / 1:23 / 1:02:03 */
+export function formatClockTime(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+  return `${minutes}:${String(secs).padStart(2, '0')}`
 }
 
 export function renderSimpleMarkdown(content: string): string {

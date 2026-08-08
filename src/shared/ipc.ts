@@ -123,12 +123,14 @@ export const IPC_CHANNELS = {
   AI_SETTINGS_UPDATE: 'ai:settings-update',
   AI_CHAT: 'ai:chat',
 
-  RECORD_START: 'record:start',
-  RECORD_STOP: 'record:stop',
-  RECORD_STATUS: 'record:status',
+  RECORD_GET_SOURCE: 'record:get-source',
+  RECORD_SAVE: 'record:save',
   RECORD_LIST: 'record:list',
-  RECORD_READ: 'record:read',
+  RECORD_GET_URL: 'record:get-url',
   RECORD_DELETE: 'record:delete',
+  RECORD_OPEN_DIR: 'record:open-dir',
+  RECORD_GET_DIR: 'record:get-dir',
+  RECORD_PICK_DIR: 'record:pick-dir',
 
   RDP_LAUNCH: 'rdp:launch',
 

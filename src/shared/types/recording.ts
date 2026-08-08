@@ -1,37 +1,34 @@
-export type RecordingDirection = 'in' | 'out'
-export type RecordingSessionType = 'ssh' | 'local' | 'telnet'
-
 export interface RecordingMeta {
   id: string
   title: string
-  sessionType: RecordingSessionType
-  connectionId?: string
-  connectionName?: string
-  cols: number
-  rows: number
   startedAt: string
   endedAt?: string
   durationMs?: number
   filePath: string
+  mimeType: string
+  fileSize?: number
 }
 
-export interface RecordingStartParams {
-  sessionId: string
+export interface RecordingSaveParams {
   title: string
-  sessionType: RecordingSessionType
-  connectionId?: string
-  connectionName?: string
-  cols: number
-  rows: number
+  startedAt: string
+  durationMs: number
+  mimeType: string
+  /** MP4/WebM 二进制内容 */
+  data: ArrayBuffer
 }
 
-export interface RecordingEvent {
-  offsetMs: number
-  dir: RecordingDirection
-  data: string
-}
-
-export interface RecordingFile {
+export interface RecordingFileUrl {
   meta: RecordingMeta
-  events: RecordingEvent[]
+  /** 可供 <video> 使用的本地协议 URL */
+  url: string
+}
+
+export interface RecordingDirInfo {
+  /** 当前实际使用的保存目录 */
+  currentDir: string
+  /** 应用默认目录（未自定义时使用） */
+  defaultDir: string
+  /** 是否正在使用自定义目录 */
+  isCustom: boolean
 }

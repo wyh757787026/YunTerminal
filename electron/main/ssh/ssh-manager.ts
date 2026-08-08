@@ -3,7 +3,6 @@ import { Client } from 'ssh2'
 import { IPC_CHANNELS, type SshStatusEvent } from '../../../src/shared/ipc'
 import type { ConnectionStore } from '../store/connection-store'
 import type { CredentialStore } from '../store/credential-store'
-import type { RecordingManager } from '../recording/recording-manager'
 import type { SshAuthBridge } from './ssh-auth-bridge'
 import {
   createSshClient,
@@ -39,7 +38,6 @@ export class SshManager {
   constructor(
     private readonly store: ConnectionStore,
     private getWindow: () => BrowserWindow | null,
-    private readonly recordingManager?: RecordingManager,
     private readonly authBridge?: SshAuthBridge,
     private readonly credentialStore?: CredentialStore,
     private readonly onConnectionClientClosed?: (connectionId: string) => void
@@ -263,7 +261,6 @@ export class SshManager {
   }
 
   write(sessionId: string, data: string): void {
-    this.recordingManager?.append(sessionId, 'in', data)
     this.sessions.get(sessionId)?.stream?.write(data)
   }
 
@@ -365,7 +362,6 @@ export class SshManager {
   }
 
   private emitData(sessionId: string, data: string): void {
-    this.recordingManager?.append(sessionId, 'out', data)
     this.getWindow()?.webContents.send(IPC_CHANNELS.SSH_DATA, { sessionId, data })
   }
 

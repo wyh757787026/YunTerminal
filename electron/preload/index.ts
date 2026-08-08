@@ -60,9 +60,10 @@ import type { NoteInput, StoredNote } from '../../src/shared/types/note'
 import type { ServerInfoSummary, ServerMetrics } from '../../src/shared/types/monitor'
 import type { AiChatParams, AiChatResult, AiPublicSettings, AiSettingsInput } from '../../src/shared/types/ai'
 import type {
-  RecordingFile,
+  RecordingDirInfo,
+  RecordingFileUrl,
   RecordingMeta,
-  RecordingStartParams
+  RecordingSaveParams
 } from '../../src/shared/types/recording'
 import type { RdpLaunchResult } from '../../src/shared/types/rdp'
 import type { CredentialInput, StoredCredential } from '../../src/shared/types/credential'
@@ -340,16 +341,17 @@ const api = {
       ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT, params)
   },
   recording: {
-    start: (params: RecordingStartParams): Promise<RecordingMeta> =>
-      ipcRenderer.invoke(IPC_CHANNELS.RECORD_START, params),
-    stop: (sessionId: string): Promise<RecordingMeta | null> =>
-      ipcRenderer.invoke(IPC_CHANNELS.RECORD_STOP, sessionId),
-    isRecording: (sessionId: string): Promise<boolean> =>
-      ipcRenderer.invoke(IPC_CHANNELS.RECORD_STATUS, sessionId),
+    getSource: (): Promise<{ id: string; name: string } | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RECORD_GET_SOURCE),
+    save: (params: RecordingSaveParams): Promise<RecordingMeta> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RECORD_SAVE, params),
     list: (): Promise<RecordingMeta[]> => ipcRenderer.invoke(IPC_CHANNELS.RECORD_LIST),
-    read: (id: string): Promise<RecordingFile | null> =>
-      ipcRenderer.invoke(IPC_CHANNELS.RECORD_READ, id),
-    delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.RECORD_DELETE, id)
+    getUrl: (id: string): Promise<RecordingFileUrl | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.RECORD_GET_URL, id),
+    delete: (id: string): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.RECORD_DELETE, id),
+    openDir: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.RECORD_OPEN_DIR),
+    getDir: (): Promise<RecordingDirInfo> => ipcRenderer.invoke(IPC_CHANNELS.RECORD_GET_DIR),
+    pickDir: (): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.RECORD_PICK_DIR)
   },
   rdp: {
     launch: (connectionId: string): Promise<RdpLaunchResult> =>

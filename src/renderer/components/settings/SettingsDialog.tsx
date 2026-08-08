@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import {
   AI_PROVIDER_OPTIONS,
@@ -19,6 +19,7 @@ import {
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { SettingsRow, SettingsSelect, SettingsToggle } from '@renderer/components/settings/SettingsRow'
 import { LockPasswordDialog } from '@renderer/components/lock/LockPasswordDialog'
+import { Toast, type ToastTone } from '@renderer/components/common/Toast'
 
 type SettingsTab = 'terminal' | 'notes' | 'lock' | 'ai'
 
@@ -31,6 +32,9 @@ export function SettingsDialog(): React.JSX.Element {
   const [saving, setSaving] = useState(false)
   const [lockPasswordConfigured, setLockPasswordConfigured] = useState(false)
   const [lockPasswordDialogOpen, setLockPasswordDialogOpen] = useState(false)
+  const [defaultRecordingDir, setDefaultRecordingDir] = useState('')
+  const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null)
+  const dismissToast = useCallback(() => setToast(null), [])
 
   useEffect(() => {
     setTerminalDraft(settings)
@@ -41,7 +45,15 @@ export function SettingsDialog(): React.JSX.Element {
     void window.api.lockScreen.getStatus().then((status) => {
       setLockPasswordConfigured(status.passwordConfigured)
     })
+    void window.api.recording.getDir().then((info) => {
+      setDefaultRecordingDir(info.defaultDir)
+    })
   }, [])
+
+  const handlePickRecordingDir = async (): Promise<void> => {
+    const dir = await window.api.recording.pickDir()
+    if (dir) updateTerminalField('recordingSaveDir', dir)
+  }
 
   const updateTerminalField = <K extends keyof TerminalSettings>(
     key: K,
@@ -73,7 +85,15 @@ export function SettingsDialog(): React.JSX.Element {
         model: aiDraft.model,
         apiKey: apiKey || undefined
       })
-      closeSettingsDialog()
+      if (apiKey) setApiKey('')
+      const nextAi = await window.api.ai.getSettings()
+      setAiDraft(nextAi)
+      setToast({ message: '设置已保存', tone: 'success' })
+    } catch (err) {
+      setToast({
+        message: err instanceof Error ? err.message : '保存设置失败',
+        tone: 'error'
+      })
     } finally {
       setSaving(false)
     }
@@ -81,6 +101,14 @@ export function SettingsDialog(): React.JSX.Element {
 
   return (
     <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center">
+      {toast ? (
+        <Toast
+          key={`${toast.tone}:${toast.message}`}
+          message={toast.message}
+          tone={toast.tone}
+          onClose={dismissToast}
+        />
+      ) : null}
       <div className="panel max-h-[90vh] w-full max-w-lg overflow-hidden rounded-lg border shadow-2xl">
         <div className="flex items-center justify-between border-b border-surface-border px-4 py-3">
           <h2 className="text-sm font-semibold">设置</h2>
@@ -204,6 +232,37 @@ export function SettingsDialog(): React.JSX.Element {
                 />
                 光标闪烁
               </label>
+
+              <div className="space-y-1.5">
+                <span className="block text-xs text-accent-muted">录屏保存目录</span>
+                <p className="text-[11px] leading-snug text-accent-muted">
+                  未自定义时使用应用默认目录。更改后新录制将保存到新位置，列表仅显示当前目录中的文件。
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    className="input min-w-0 flex-1 font-mono text-[11px]"
+                    value={terminalDraft.recordingSaveDir}
+                    placeholder={defaultRecordingDir || '应用默认目录'}
+                    onChange={(e) => updateTerminalField('recordingSaveDir', e.target.value)}
+                    spellCheck={false}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary shrink-0"
+                    onClick={() => void handlePickRecordingDir()}
+                  >
+                    浏览
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary shrink-0"
+                    disabled={!terminalDraft.recordingSaveDir}
+                    onClick={() => updateTerminalField('recordingSaveDir', '')}
+                  >
+                    默认
+                  </button>
+                </div>
+              </div>
             </>
           )}
 
@@ -364,13 +423,7 @@ export function SettingsDialog(): React.JSX.Element {
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-surface-border px-4 py-3">
-          <button
-            className="rounded-md border border-surface-border px-3 py-1.5 text-sm text-accent-muted"
-            onClick={closeSettingsDialog}
-          >
-            取消
-          </button>
+        <div className="flex justify-end border-t border-surface-border px-4 py-3">
           <button className="btn-primary" onClick={() => void handleSave()} disabled={saving}>
             {saving ? '保存中...' : '保存'}
           </button>

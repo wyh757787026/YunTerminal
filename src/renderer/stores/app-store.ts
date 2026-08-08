@@ -10,7 +10,7 @@ export type SplitDirection = 'horizontal' | 'vertical'
 export type FocusedPane = 'primary' | 'secondary'
 export type ProtocolTab = 'ssh' | 'rdp' | 'telnet' | 'tunnel' | 'vnc' | 'ftp'
 export type WorkspaceView = 'connections' | 'session'
-export type BottomPanelTab = 'tunnel' | 'notes' | 'monitor' | 'recordings'
+export type BottomPanelTab = 'tunnel' | 'notes' | 'monitor'
 export type ConnectionSection = 'all' | 'favorites' | 'recent' | 'common' | `group:${string}`
 
 interface SplitState {
@@ -163,7 +163,6 @@ function disconnectLink(session: Session): void {
   }
 
   for (const terminal of session.terminals) {
-    void window.api.recording.stop(terminal.id)
     if (session.type === 'ssh') {
       void window.api.ssh.disconnect(terminal.id)
     }
@@ -553,7 +552,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       return
     }
 
-    void window.api.recording.stop(targetId)
     if (link.type === 'ssh') {
       void window.api.ssh.disconnect(targetId)
     }
