@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { SearchAddon } from '@xterm/addon-search'
@@ -12,10 +13,30 @@ import { useAppStore } from '@renderer/stores/app-store'
 import { TerminalSearchBar } from './TerminalSearchBar'
 import '@xterm/xterm/css/xterm.css'
 
+const CONTEXT_MENU_WIDTH = 112
+const CONTEXT_MENU_EST_HEIGHT = 72
+const CONTEXT_MENU_PAD = 8
+
 interface ContextMenuState {
   x: number
   y: number
   hasSelection: boolean
+}
+
+function clampContextMenuPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): { left: number; top: number } {
+  const maxLeft = window.innerWidth - width - CONTEXT_MENU_PAD
+  const maxTop = window.innerHeight - height - CONTEXT_MENU_PAD
+  const left = Math.max(CONTEXT_MENU_PAD, Math.min(x, maxLeft))
+  const top =
+    y + height + CONTEXT_MENU_PAD > window.innerHeight
+      ? Math.max(CONTEXT_MENU_PAD, y - height)
+      : Math.max(CONTEXT_MENU_PAD, Math.min(y, maxTop))
+  return { left, top }
 }
 
 interface SshTerminalProps {
@@ -48,6 +69,8 @@ export function SshTerminal({
   const pendingQuickCommand = useAppStore((s) => s.pendingQuickCommand)
   const clearPendingQuickCommand = useAppStore((s) => s.clearPendingQuickCommand)
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({})
+  const contextMenuRef = useRef<HTMLDivElement>(null)
   const updateSessionStatusRef = useRef(updateSessionStatus)
   const onSearchReadyRef = useRef(onSearchReady)
   updateSessionStatusRef.current = updateSessionStatus
@@ -259,12 +282,43 @@ export function SshTerminal({
     e.preventDefault()
     if (!connectedRef.current || !terminalRef.current) return
     const selection = terminalRef.current.getSelection()
+    const pos = clampContextMenuPosition(
+      e.clientX,
+      e.clientY,
+      CONTEXT_MENU_WIDTH,
+      CONTEXT_MENU_EST_HEIGHT
+    )
+    setMenuStyle({
+      position: 'fixed',
+      left: pos.left,
+      top: pos.top,
+      width: CONTEXT_MENU_WIDTH,
+      zIndex: 9999
+    })
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       hasSelection: selection.length > 0
     })
   }
+
+  useLayoutEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) return
+    const { offsetWidth, offsetHeight } = contextMenuRef.current
+    const pos = clampContextMenuPosition(
+      contextMenu.x,
+      contextMenu.y,
+      offsetWidth || CONTEXT_MENU_WIDTH,
+      offsetHeight || CONTEXT_MENU_EST_HEIGHT
+    )
+    setMenuStyle({
+      position: 'fixed',
+      left: pos.left,
+      top: pos.top,
+      width: CONTEXT_MENU_WIDTH,
+      zIndex: 9999
+    })
+  }, [contextMenu])
 
   const handleCopy = async (): Promise<void> => {
     const term = terminalRef.current
@@ -303,30 +357,33 @@ export function SshTerminal({
         <TerminalSearchBar searchAddon={searchAddonRef.current} onClose={onSearchClose} />
       )}
       <div ref={containerRef} className="h-full w-full p-1" />
-      {contextMenu && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={closeContextMenu} onContextMenu={(e) => {
-            e.preventDefault()
-            closeContextMenu()
-          }} />
-          <div
-            className="dropdown-menu fixed z-50 w-28"
-            style={{ left: contextMenu.x, top: contextMenu.y }}
-          >
-            <button
-              type="button"
-              className="dropdown-item disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-              disabled={!contextMenu.hasSelection}
-              onClick={() => void handleCopy()}
-            >
-              复制
-            </button>
-            <button type="button" className="dropdown-item" onClick={() => void handlePaste()}>
-              粘贴
-            </button>
-          </div>
-        </>
-      )}
+      {contextMenu &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={closeContextMenu}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                closeContextMenu()
+              }}
+            />
+            <div ref={contextMenuRef} className="dropdown-menu fixed mt-0 w-28" style={menuStyle}>
+              <button
+                type="button"
+                className="dropdown-item disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                disabled={!contextMenu.hasSelection}
+                onClick={() => void handleCopy()}
+              >
+                复制
+              </button>
+              <button type="button" className="dropdown-item" onClick={() => void handlePaste()}>
+                粘贴
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   )
 }
