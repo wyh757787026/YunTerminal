@@ -1,6 +1,9 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
 import type { SFTPWrapper } from 'ssh2'
 import type { Client } from 'ssh2'
-import type { BrowserWindow } from 'electron'
+import { shell, type BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '../../../src/shared/ipc'
 import type { FileEntry, SftpTransferProgress } from '../../../src/shared/types/sftp'
 import type { ConnectionStore } from '../store/connection-store'
@@ -263,6 +266,34 @@ export class SftpManager {
         err ? reject(err) : resolve()
       )
     })
+  }
+
+  /** 远程文件复制：经临时文件中转（SFTP 无通用 COPY） */
+  async copy(connectionId: string, fromPath: string, toPath: string): Promise<void> {
+    const from = normalizeRemotePath(fromPath)
+    const to = normalizeRemotePath(toPath)
+    const tempDir = await mkdtemp(join(tmpdir(), 'yun-sftp-copy-'))
+    const tempFile = join(tempDir, basename(from) || 'file')
+    const transferId = `copy-${Date.now()}`
+    try {
+      await this.download(connectionId, from, tempFile, transferId)
+      await this.upload(connectionId, tempFile, to, transferId)
+    } finally {
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  }
+
+  /** 下载到临时目录并用系统默认程序打开 */
+  async openLocal(connectionId: string, remotePath: string): Promise<void> {
+    const remote = normalizeRemotePath(remotePath)
+    const name = basename(remote) || 'file'
+    const tempDir = await mkdtemp(join(tmpdir(), 'yun-sftp-open-'))
+    const localPath = join(tempDir, name)
+    await this.download(connectionId, remote, localPath, `open-${Date.now()}`)
+    const openError = await shell.openPath(localPath)
+    if (openError) {
+      throw new Error(openError)
+    }
   }
 
   async chmod(connectionId: string, path: string, mode: number): Promise<void> {

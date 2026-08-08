@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowDown,
   ArrowUp,
@@ -19,12 +20,60 @@ import { FileEditorDialog } from './FileEditorDialog'
 
 type SftpPrompt =
   | { kind: 'mkdir' }
+  | { kind: 'rename'; path: string; name: string }
   | { kind: 'chmod'; path: string; mode: number; isDirectory: boolean }
+
+interface RemoteClipboardEntry {
+  path: string
+  name: string
+  isDirectory: boolean
+}
+
+interface RemoteClipboard {
+  mode: 'copy' | 'cut'
+  entries: RemoteClipboardEntry[]
+}
+
+interface ContextMenuState {
+  x: number
+  y: number
+  targetPath: string | null
+}
+
+const CONTEXT_MENU_WIDTH = 140
+const CONTEXT_MENU_PAD = 8
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function stripIpcError(raw: string): string {
+  return raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, '')
+}
+
+function parentRemoteDir(path: string): string {
+  const normalized = path.replace(/\/+$/, '')
+  const idx = normalized.lastIndexOf('/')
+  if (idx <= 0) return '/'
+  return normalized.slice(0, idx) || '/'
+}
+
+function clampContextMenuPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): { left: number; top: number } {
+  const maxLeft = window.innerWidth - width - CONTEXT_MENU_PAD
+  const maxTop = window.innerHeight - height - CONTEXT_MENU_PAD
+  const left = Math.max(CONTEXT_MENU_PAD, Math.min(x, maxLeft))
+  const top =
+    y + height + CONTEXT_MENU_PAD > window.innerHeight
+      ? Math.max(CONTEXT_MENU_PAD, y - height)
+      : Math.max(CONTEXT_MENU_PAD, Math.min(y, maxTop))
+  return { left, top }
 }
 
 const FILE_SYSTEM_ROOT = '/'
@@ -47,6 +96,8 @@ interface PaneProps {
   dropHint?: string
   /** 本地面板：支持 Windows 盘符列表（此电脑） */
   windowsComputerRoot?: boolean
+  cutPaths?: Set<string>
+  onContextMenu?: (e: React.MouseEvent, path: string | null) => void
 }
 
 function FilePane({
@@ -59,7 +110,9 @@ function FilePane({
   onSelect,
   onDropTransfer,
   dropHint,
-  windowsComputerRoot = false
+  windowsComputerRoot = false,
+  cutPaths,
+  onContextMenu
 }: PaneProps): React.JSX.Element {
   const [dragOver, setDragOver] = useState(false)
 
@@ -114,6 +167,12 @@ function FilePane({
         const raw = e.dataTransfer.getData('text/plain')
         if (raw) onDropTransfer(raw.split('|'))
       }}
+      onContextMenu={(e) => {
+        if (!onContextMenu) return
+        if ((e.target as HTMLElement).closest('tr[data-entry]')) return
+        e.preventDefault()
+        onContextMenu(e, null)
+      }}
     >
       <div className="flex shrink-0 items-center gap-2 border-b border-surface-border px-2 py-1">
         {title ? (
@@ -143,6 +202,7 @@ function FilePane({
               {entries.map((entry) => (
                 <tr
                   key={entry.path}
+                  data-entry
                   draggable
                   onDragStart={(e) => {
                     e.dataTransfer.setData('text/plain', entry.path)
@@ -152,8 +212,14 @@ function FilePane({
                     selected.has(entry.path)
                       ? 'bg-accent/20 text-accent shadow-[inset_3px_0_0_0_rgb(var(--c-accent))]'
                       : ''
-                  }`}
+                  } ${cutPaths?.has(entry.path) ? 'opacity-50' : ''}`}
                   onClick={(e) => onSelect(entry.path, e.ctrlKey || e.metaKey)}
+                  onContextMenu={(e) => {
+                    if (!onContextMenu) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onContextMenu(e, entry.path)
+                  }}
                   onDoubleClick={() => {
                     if (entry.isDirectory) onNavigate(entry.path)
                   }}
@@ -221,6 +287,10 @@ export function SftpBrowser(): React.JSX.Element {
     null
   )
   const [prompt, setPrompt] = useState<SftpPrompt | null>(null)
+  const [clipboard, setClipboard] = useState<RemoteClipboard | null>(null)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({})
+  const contextMenuRef = useRef<HTMLDivElement>(null)
 
   const loadLocal = useCallback(async (path: string) => {
     setLocalLoading(true)
@@ -232,7 +302,7 @@ export function SftpBrowser(): React.JSX.Element {
       setLocalSelected(new Set())
     } catch (err) {
       const raw = err instanceof Error ? err.message : '加载本地目录失败'
-      setError(raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, ''))
+      setError(stripIpcError(raw))
     } finally {
       setLocalLoading(false)
     }
@@ -282,7 +352,7 @@ export function SftpBrowser(): React.JSX.Element {
         if (cancelled) return
         setSftpReady(false)
         const raw = err instanceof Error ? err.message : 'SFTP 连接失败'
-        setError(raw.replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/i, ''))
+        setError(stripIpcError(raw))
       }
     })()
 
@@ -301,6 +371,24 @@ export function SftpBrowser(): React.JSX.Element {
       }
     })
   }, [])
+
+  useLayoutEffect(() => {
+    if (!contextMenu || !contextMenuRef.current) return
+    const { offsetWidth, offsetHeight } = contextMenuRef.current
+    const pos = clampContextMenuPosition(
+      contextMenu.x,
+      contextMenu.y,
+      offsetWidth || CONTEXT_MENU_WIDTH,
+      offsetHeight || 160
+    )
+    setMenuStyle({
+      position: 'fixed',
+      left: pos.left,
+      top: pos.top,
+      minWidth: CONTEXT_MENU_WIDTH,
+      zIndex: 9999
+    })
+  }, [contextMenu])
 
   const handleLocalSelect = (path: string, multi: boolean): void => {
     setLocalSelected((prev) => {
@@ -406,6 +494,32 @@ export function SftpBrowser(): React.JSX.Element {
     }
   }
 
+  const handleRenameConfirm = async (value: string): Promise<void> => {
+    if (!connectionId || prompt?.kind !== 'rename') return
+    const nextName = value.trim()
+    if (!nextName || nextName === prompt.name) {
+      setPrompt(null)
+      return
+    }
+    if (nextName.includes('/') || nextName.includes('\\')) {
+      setError('名称不能包含路径分隔符')
+      return
+    }
+    setPrompt(null)
+    setError(null)
+    try {
+      await window.api.sftp.rename({
+        connectionId,
+        oldPath: prompt.path,
+        newPath: joinRemotePath(parentRemoteDir(prompt.path), nextName)
+      })
+      await loadRemote(remotePath)
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : '重命名失败'
+      setError(stripIpcError(raw))
+    }
+  }
+
   const handleChmodExecute = (command: string): void => {
     if (!activeSessionId) {
       setError('没有活动的终端会话')
@@ -444,6 +558,124 @@ export function SftpBrowser(): React.JSX.Element {
     setEditor(null)
   }
 
+  const closeContextMenu = (): void => setContextMenu(null)
+
+  const handleRemoteContextMenu = (e: React.MouseEvent, path: string | null): void => {
+    if (path) {
+      if (!remoteSelected.has(path)) {
+        setRemoteSelected(new Set([path]))
+      }
+    }
+    const pos = clampContextMenuPosition(e.clientX, e.clientY, CONTEXT_MENU_WIDTH, 160)
+    setMenuStyle({
+      position: 'fixed',
+      left: pos.left,
+      top: pos.top,
+      minWidth: CONTEXT_MENU_WIDTH,
+      zIndex: 9999
+    })
+    setContextMenu({ x: e.clientX, y: e.clientY, targetPath: path })
+  }
+
+  const contextSelection = (): string[] => {
+    if (remoteSelected.size > 0) return [...remoteSelected]
+    if (contextMenu?.targetPath) return [contextMenu.targetPath]
+    return []
+  }
+
+  const setClipboardFromSelection = (mode: 'copy' | 'cut', paths: string[]): void => {
+    const entries = paths
+      .map((p) => remoteEntries.find((e) => e.path === p))
+      .filter((e): e is FileEntry => !!e)
+      .map((e) => ({ path: e.path, name: e.name, isDirectory: e.isDirectory }))
+    if (entries.length === 0) {
+      setError('没有可操作的项目')
+      return
+    }
+    setClipboard({ mode, entries })
+    setError(null)
+  }
+
+  const pasteClipboard = async (): Promise<void> => {
+    if (!connectionId || !clipboard || clipboard.entries.length === 0) return
+    setError(null)
+    const remoteNames = new Set(remoteEntries.map((e) => e.name))
+    let done = 0
+    let skipped = 0
+    const notes: string[] = []
+
+    try {
+      for (const entry of clipboard.entries) {
+        if (clipboard.mode === 'copy' && entry.isDirectory) {
+          notes.push(`跳过文件夹复制: ${entry.name}`)
+          skipped += 1
+          continue
+        }
+
+        const target = joinRemotePath(remotePath, entry.name)
+        const sameFolder = parentRemoteDir(entry.path) === remotePath
+
+        if (clipboard.mode === 'cut' && sameFolder) {
+          skipped += 1
+          continue
+        }
+
+        if (remoteNames.has(entry.name)) {
+          notes.push(`目标已存在，已跳过: ${entry.name}`)
+          skipped += 1
+          continue
+        }
+
+        if (clipboard.mode === 'cut') {
+          await window.api.sftp.rename({
+            connectionId,
+            oldPath: entry.path,
+            newPath: target
+          })
+        } else {
+          await window.api.sftp.copy({
+            connectionId,
+            oldPath: entry.path,
+            newPath: target
+          })
+        }
+        done += 1
+        remoteNames.add(entry.name)
+      }
+
+      if (clipboard.mode === 'cut') setClipboard(null)
+      if (notes.length > 0 || skipped > 0) {
+        setError([`完成 ${done} 项`, ...notes].filter(Boolean).join('；'))
+      }
+      await loadRemote(remotePath)
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : '粘贴失败'
+      setError(stripIpcError(raw))
+    }
+  }
+
+  const openRemoteFile = async (path: string): Promise<void> => {
+    if (!connectionId) return
+    const entry = remoteEntries.find((e) => e.path === path)
+    if (!entry || entry.isDirectory) {
+      setError('只能打开文件')
+      return
+    }
+    setError(null)
+    try {
+      await window.api.sftp.openLocal({ connectionId, path: entry.path })
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : '打开失败'
+      setError(stripIpcError(raw))
+    }
+  }
+
+  const renameRemotePath = (path: string): void => {
+    const entry = remoteEntries.find((e) => e.path === path)
+    if (!entry) return
+    setPrompt({ kind: 'rename', path: entry.path, name: entry.name })
+  }
+
   if (!connectionId) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-accent-muted">
@@ -475,6 +707,25 @@ export function SftpBrowser(): React.JSX.Element {
       : transfer?.status === 'done'
         ? 100
         : 0
+
+  const cutPaths =
+    clipboard?.mode === 'cut' ? new Set(clipboard.entries.map((e) => e.path)) : undefined
+
+  const contextTarget = contextMenu?.targetPath
+    ? remoteEntries.find((e) => e.path === contextMenu.targetPath)
+    : undefined
+  const canOpen =
+    !!contextTarget && !contextTarget.isDirectory
+      ? true
+      : contextSelection().length === 1 &&
+        !!remoteEntries.find((e) => e.path === contextSelection()[0] && !e.isDirectory)
+  const canRename = contextSelection().length === 1
+  const openPath =
+    contextTarget && !contextTarget.isDirectory
+      ? contextTarget.path
+      : contextSelection().length === 1
+        ? contextSelection()[0]
+        : null
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -509,11 +760,7 @@ export function SftpBrowser(): React.JSX.Element {
         >
           <Edit3 size={13} />
         </button>
-        <button
-          className="btn-icon h-7 w-7"
-          title="修改权限"
-          onClick={chmodRemote}
-        >
+        <button className="btn-icon h-7 w-7" title="修改权限" onClick={chmodRemote}>
           <Shield size={13} />
         </button>
         <button
@@ -555,6 +802,8 @@ export function SftpBrowser(): React.JSX.Element {
             void uploadSelected()
           }}
           dropHint="拖拽本地文件到此处上传"
+          cutPaths={cutPaths}
+          onContextMenu={handleRemoteContextMenu}
         />
       </div>
 
@@ -598,6 +847,16 @@ export function SftpBrowser(): React.JSX.Element {
         />
       )}
 
+      {prompt?.kind === 'rename' && (
+        <PromptDialog
+          title="重命名"
+          label="新名称"
+          defaultValue={prompt.name}
+          onConfirm={(value) => void handleRenameConfirm(value)}
+          onClose={() => setPrompt(null)}
+        />
+      )}
+
       {prompt?.kind === 'chmod' && (
         <ChmodDialog
           path={prompt.path}
@@ -607,6 +866,88 @@ export function SftpBrowser(): React.JSX.Element {
           onClose={() => setPrompt(null)}
         />
       )}
+
+      {contextMenu &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-[9998]"
+              onClick={closeContextMenu}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                closeContextMenu()
+              }}
+            />
+            <div
+              ref={contextMenuRef}
+              className="dropdown-menu fixed mt-0"
+              style={menuStyle}
+              role="menu"
+            >
+              {canOpen && openPath ? (
+                <button
+                  type="button"
+                  className="dropdown-item"
+                  onClick={() => {
+                    closeContextMenu()
+                    void openRemoteFile(openPath)
+                  }}
+                >
+                  打开
+                </button>
+              ) : null}
+              {contextMenu.targetPath ? (
+                <>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      setClipboardFromSelection('copy', contextSelection())
+                      closeContextMenu()
+                    }}
+                  >
+                    复制
+                  </button>
+                  <button
+                    type="button"
+                    className="dropdown-item"
+                    onClick={() => {
+                      setClipboardFromSelection('cut', contextSelection())
+                      closeContextMenu()
+                    }}
+                  >
+                    剪切
+                  </button>
+                  {canRename ? (
+                    <button
+                      type="button"
+                      className="dropdown-item"
+                      onClick={() => {
+                        const path = contextSelection()[0]
+                        closeContextMenu()
+                        if (path) renameRemotePath(path)
+                      }}
+                    >
+                      重命名
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              <button
+                type="button"
+                className="dropdown-item disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+                disabled={!clipboard || clipboard.entries.length === 0}
+                onClick={() => {
+                  closeContextMenu()
+                  void pasteClipboard()
+                }}
+              >
+                粘贴
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
     </div>
   )
 }

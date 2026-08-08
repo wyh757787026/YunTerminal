@@ -69,6 +69,8 @@ export const IPC_CHANNELS = {
   SFTP_MKDIR: 'sftp:mkdir',
   SFTP_REMOVE: 'sftp:remove',
   SFTP_RENAME: 'sftp:rename',
+  SFTP_COPY: 'sftp:copy',
+  SFTP_OPEN_LOCAL: 'sftp:open-local',
   SFTP_CHMOD: 'sftp:chmod',
   SFTP_TRANSFER_PROGRESS: 'sftp:transfer-progress',
 

@@ -227,6 +227,10 @@ const api = {
       ipcRenderer.invoke(IPC_CHANNELS.SFTP_REMOVE, params),
     rename: (params: SftpRenameParams): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.SFTP_RENAME, params),
+    copy: (params: SftpRenameParams): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SFTP_COPY, params),
+    openLocal: (params: SftpPathParams): Promise<void> =>
+      ipcRenderer.invoke(IPC_CHANNELS.SFTP_OPEN_LOCAL, params),
     chmod: (params: SftpChmodParams): Promise<void> =>
       ipcRenderer.invoke(IPC_CHANNELS.SFTP_CHMOD, params),
     onTransferProgress: (callback: (event: SftpTransferProgress) => void): (() => void) => {

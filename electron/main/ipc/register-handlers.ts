@@ -337,6 +337,14 @@ export function registerIpcHandlers(
     sftpManager.rename(params.connectionId, params.oldPath, params.newPath)
   )
 
+  ipcMain.handle(IPC_CHANNELS.SFTP_COPY, (_, params: SftpRenameParams) =>
+    sftpManager.copy(params.connectionId, params.oldPath, params.newPath)
+  )
+
+  ipcMain.handle(IPC_CHANNELS.SFTP_OPEN_LOCAL, (_, params: SftpPathParams) =>
+    sftpManager.openLocal(params.connectionId, params.path)
+  )
+
   ipcMain.handle(IPC_CHANNELS.SFTP_CHMOD, (_, params: SftpChmodParams) =>
     sftpManager.chmod(params.connectionId, params.path, params.mode)
   )
