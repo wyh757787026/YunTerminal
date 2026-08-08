@@ -24,7 +24,8 @@ export function AppLayout(): React.JSX.Element {
         {showConnections && <ConnectionTreeSidebar />}
 
         <div className="main-panel flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          {hasSessions && <TabBar />}
+          {/* 连接列表视图不显示会话标签，避免 SSH 会话出现在 RDP/FTP 等协议页 */}
+          {hasSessions && !showConnections && <TabBar />}
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
             {/* 有会话时保持挂载；用 opacity 隐藏（xterm canvas 会穿透 visibility:hidden） */}

@@ -1,7 +1,28 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { FolderOpen, GripVertical, Laptop, Monitor, Network, Plus, Scan, Server, X } from 'lucide-react'
+import type { ProtocolTab } from '@renderer/stores/app-store'
 import { useAppStore } from '@renderer/stores/app-store'
 import type { Session } from '@shared/index'
+
+function sessionMatchesProtocol(session: Session, tab: ProtocolTab): boolean {
+  switch (tab) {
+    case 'ssh':
+    case 'tunnel':
+      return session.type === 'ssh' || session.type === 'sftp' || session.type === 'local'
+    case 'telnet':
+      return session.type === 'telnet'
+    case 'vnc':
+      return session.type === 'vnc'
+    case 'ftp':
+      return session.type === 'ftp'
+    case 'rdp':
+      return false
+    default: {
+      const _exhaustive: never = tab
+      return _exhaustive
+    }
+  }
+}
 
 function SessionIcon({ session }: { session: Session }): React.JSX.Element {
   const connections = useAppStore((s) => s.connections)
@@ -30,6 +51,7 @@ export function TabBar(): React.JSX.Element {
   const {
     sessions,
     activeSessionId,
+    protocolTab,
     setActiveSession,
     removeSession,
     reorderSessions,
@@ -38,6 +60,11 @@ export function TabBar(): React.JSX.Element {
 
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
+
+  const visibleSessions = useMemo(
+    () => sessions.filter((session) => sessionMatchesProtocol(session, protocolTab)),
+    [sessions, protocolTab]
+  )
 
   const handleDrop = useCallback(
     (targetId: string, sourceId: string): void => {
@@ -51,7 +78,7 @@ export function TabBar(): React.JSX.Element {
 
   return (
     <div className="tab-strip">
-      {sessions.map((session) => {
+      {visibleSessions.map((session) => {
         const isActive = session.id === activeSessionId
         const isDragging = draggingId === session.id
         const isDropTarget = dropTargetId === session.id && draggingId !== session.id
