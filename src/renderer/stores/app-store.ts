@@ -87,7 +87,9 @@ interface AppState {
   createGroup: (input: GroupInput) => Promise<Group>
   updateGroup: (id: string, input: GroupInput) => Promise<Group | null>
   deleteGroup: (id: string) => Promise<boolean>
-  exportConnections: (includeSecrets?: boolean) => Promise<void>
+  exportConnections: (
+    includeSecrets?: boolean
+  ) => Promise<{ canceled: boolean; filePath?: string }>
   importConnections: (mode: 'merge' | 'replace') => Promise<void>
   connectToServer: (connection: StoredConnection, options?: { newTab?: boolean }) => void
   addLocalSession: () => void
@@ -394,10 +396,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   exportConnections: async (includeSecrets = false) => {
-    const result = await window.api.connection.export(includeSecrets)
-    if (!result.canceled && result.filePath) {
-      alert(`已导出到: ${result.filePath}`)
-    }
+    return window.api.connection.export(includeSecrets)
   },
 
   importConnections: async (mode) => {

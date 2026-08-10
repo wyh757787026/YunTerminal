@@ -7,6 +7,7 @@ import {
   HardDrive,
   Monitor,
   MoreVertical,
+  FolderOutput,
   Plus,
   RefreshCw,
   Scan,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@renderer/stores/app-store'
+import { ExportConnectionsDialog } from '@renderer/components/connection/ExportConnectionsDialog'
 import {
   getLatencyDisplay,
   getServerInfoDisplay
@@ -245,6 +247,7 @@ export function ConnectionListPanel(): React.JSX.Element {
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const protocolLabel = getProtocolLabel(protocolTab)
 
@@ -390,6 +393,14 @@ export function ConnectionListPanel(): React.JSX.Element {
         >
           <Plus size={15} />
         </button>
+        <button
+          type="button"
+          className="btn-icon-sm"
+          title="导出全部连接为 JSON"
+          onClick={() => setExportOpen(true)}
+        >
+          <FolderOutput size={13} />
+        </button>
         <div className="ml-1 flex shrink-0 items-center gap-1 border-l border-surface-border/50 pl-2">
           <button
             type="button"
@@ -488,6 +499,8 @@ export function ConnectionListPanel(): React.JSX.Element {
           </table>
         )}
       </div>
+
+      {exportOpen ? <ExportConnectionsDialog onClose={() => setExportOpen(false)} /> : null}
     </div>
   )
 }

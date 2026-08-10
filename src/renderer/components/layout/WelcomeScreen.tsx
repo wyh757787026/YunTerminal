@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import {
   Cloud,
   FolderInput,
+  FolderOutput,
   Keyboard,
   Plus,
   Server,
@@ -11,6 +13,7 @@ import {
 import { useAppStore } from '@renderer/stores/app-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { filterByProtocol } from '@renderer/lib/connection-filters'
+import { ExportConnectionsDialog } from '@renderer/components/connection/ExportConnectionsDialog'
 
 const shortcuts = [
   { keys: 'Ctrl+T', label: '新建连接' },
@@ -33,6 +36,7 @@ export function WelcomeScreen(): React.JSX.Element {
     toggleAiPanel
   } = useAppStore()
   const openSettingsDialog = useSettingsStore((s) => s.openSettingsDialog)
+  const [exportOpen, setExportOpen] = useState(false)
 
   const typedConnections = filterByProtocol(connections, protocolTab)
   const quickRecent = filterByProtocol(recent, protocolTab).slice(0, 3)
@@ -66,6 +70,10 @@ export function WelcomeScreen(): React.JSX.Element {
           <button className="welcome-card group" onClick={() => void importConnections('merge')}>
             <FolderInput size={17} className="text-accent" />
             <span className="mt-2 text-[13px] font-medium">导入配置</span>
+          </button>
+          <button className="welcome-card group" onClick={() => setExportOpen(true)}>
+            <FolderOutput size={17} className="text-accent" />
+            <span className="mt-2 text-[13px] font-medium">导出配置</span>
           </button>
           <button className="welcome-card group" onClick={openSettingsDialog}>
             <Settings size={17} className="text-accent" />
@@ -127,6 +135,8 @@ export function WelcomeScreen(): React.JSX.Element {
           </div>
         </div>
       </div>
+
+      {exportOpen ? <ExportConnectionsDialog onClose={() => setExportOpen(false)} /> : null}
     </div>
   )
 }
